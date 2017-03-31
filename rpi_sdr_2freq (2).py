@@ -6,16 +6,19 @@ import time
 import peakutils
 import csv
 
+
 # Function to produce strings with time and date
 def time_date():
-    # string including data and time
+    # string including date and time
     current_time = time.strftime("%d/%m/%y %H:%M:%S")
     # string with just date
     current_date = time.strftime("%d/%m/%y")
     # string with just time
     current_hour = time.strftime("%H:%M:%S")
+    # string with date and time in a format suitable for use as a file name
+    time_for_save = time.strftime("%m_%d_%y-%H_%M_%S")
     
-    return current_date, current_hour, current_time
+    return current_date, current_hour, current_time, time_for_save
 
 # Function to detect peaks in the data
 def peak_det(spectrum, faxis):
@@ -60,7 +63,7 @@ def display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_
 def data(sdr):
     # Read in samples from the device
     samples = sdr.read_samples(5000)
-            
+              
     # now process fft
     spectrum = 20 * numpy.log10(abs(numpy.fft.fft(samples)))
     print ("fft ready")
@@ -74,10 +77,12 @@ def data(sdr):
     faxis = []
     k = 0
     while k < array_length:
+        # faxis.append((sdr.center_freq/1000000-fstep*len(spectrum)/2) + k * fstep)
         faxis.append((sdr.center_freq/1000000) + k * fstep)
         k = k + 1
+    
 
-    return spectrum, faxis
+    return spectrum, faxis, samples
 
 #function to set up and configure SDR
 def sdr_control(freq):
@@ -101,13 +106,16 @@ print("Sampling at %.2f MHz\n" % freq_mhz)
 sdr = sdr_control(freq)
 
 # Collect Data  
-spectrum, faxis = data(sdr)
+spectrum, faxis, samples = data(sdr)
 
 # Detect Peaks   
 amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, indexes = peak_det(spectrum, faxis)
 
 # Get current time and date    
-current_date, current_hour, current_time = time_date()
+current_date, current_hour, current_time, time_for_save = time_date()
+
+# Save the sampled data for later use if needed 
+numpy.save('%s-%.1fMHz-%.4fMHz-raw_samples' % (time_for_save,freq_mhz,(sdr.sample_rate/1000000)) , samples)
 
 # Record results
 display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2)
@@ -126,13 +134,16 @@ print("Sampling at %.2f MHz\n" % freq_mhz)
 sdr = sdr_control(freq)
 
 # Collect Data    
-spectrum2, faxis2 = data(sdr)
+spectrum2, faxis2, samples2 = data(sdr)
 
 # Detect Peaks   
 amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22, indexes2 = peak_det(spectrum2, faxis2)
 
 # Get current time and date     
-current_date, current_hour, current_time = time_date()
+current_date, current_hour, current_time, time_for_save = time_date()
+
+# Save the sampled data for later use if needed 
+numpy.save('%s-%.1fMHz-%.4fMHz-raw_samples' % (time_for_save,freq_mhz,(sdr.sample_rate/1000000)) , samples2)
 
 # Record results
 display_write(current_date, current_hour, amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22)
