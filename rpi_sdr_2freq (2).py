@@ -1,11 +1,13 @@
-# imports
+## Imports ##
 from rtlsdr import RtlSdr
 import numpy
 import matplotlib.pyplot as plt
 import time
 import peakutils
-import csv 
+import csv
+import RPi.GPIO as gpio
 
+## Function Definitiona ##
 
 # Function to produce strings with time and date
 def time_date():
@@ -103,12 +105,48 @@ def sdr_control(freq):
         
     return sdr
 
+# Function to set up Rpi gpio for antenna switching
+def gpio_set():
+    
+    # pin numbering mode
+    gpio.setmode(gpio.BOARD)
+
+    # pins to be used
+    chan_list = [16,18,22,24,26]
+
+    # set pins as outputs
+    gpio.setup(chan_list, gpio.OUT)
+
+    # set all pins low as starting point
+    gpio.output(chan_list, gpio.LOW)
+
+    return
+
+# function to switch antennna
+def gpio_switch(chan, state):
+
+    # activate selected gpio
+    gpio.output(chan, state)
+
+    # wait for switch
+    time.sleep(0.5)
+    
+    return
+
+## Main Body ##
+
+# set up gpio
+gpio_set()
+    
 # Set first frequency of interest and display in MHz
 freq = 70e6
 freq_mhz = freq/1000000
 print("Sampling at %.2f MHz\n" % freq_mhz)
 
-# Set up SDR
+# Activate 70MHz antenna
+gpio_switch(18,gpio.HIGH)
+
+# set up SDR
 sdr = sdr_control(freq)
 
 # Collect Data  
@@ -129,8 +167,14 @@ display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, f
 
 # Disconnect SDR
 sdr.close()
+
+# Deactivate 70MHz antenna
+gpio_switch(18,gpio.LOW)
     
 # Taking second sample
+
+# Activate 868MHz antenna
+gpio_switch(16,gpio.HIGH)
 
 # Set second frequency of interest and diplay in MHz
 freq = 868e6
@@ -159,36 +203,46 @@ display_write(current_date, current_hour, amp_peak_12, freq_peak_12, amp_peak_22
 # Disconnect SDR
 sdr.close()
 
+# Deactivate 868MHz antenna
+gpio_switch(16,gpio.LOW)
+
+
+# Flash status lights to indicate sucessful completion
+gpio_switch([22,24,26],gpio.HIGH)
+gpio_switch([22,24,26],gpio.LOW)
+
+# gpio disconnect
+gpio.cleanup()
 
 # graph data to aid debuging
 # plot the date from the last sample period
-plt.plot(faxis,spectrum.real)
+#plt.plot(faxis,spectrum.real)
 
 # Plot all detected peaks
-x = 0
-while x < len(indexes):
-    plt.plot(faxis[indexes[x]], spectrum.real[indexes[x]], 'ro')
-    x += 1
+#x = 0
+#while x < len(indexes):
+#    plt.plot(faxis[indexes[x]], spectrum.real[indexes[x]], 'ro')
+#    x += 1
 
 # format plot
-plt.xlabel('MHz')
-plt.ylabel('dB')
-plt.title('FFT of spectrum')
-plt.grid()
+#plt.xlabel('MHz')
+#plt.ylabel('dB')
+#plt.title('FFT of spectrum')
+#plt.grid()
 
-plt.figure()
+#plt.figure()
 # plot the date from the last sample period
-plt.plot(faxis2,spectrum2.real)
+#plt.plot(faxis2,spectrum2.real)
 
 # Plot all detected peaks
-x = 0
-while x < len(indexes2):
-    plt.plot(faxis2[indexes2[x]], spectrum2.real[indexes2[x]], 'ro')
-    x += 1
+#x = 0
+#while x < len(indexes2):
+#    plt.plot(faxis2[indexes2[x]], spectrum2.real[indexes2[x]], 'ro')
+#    x += 1
 
 # format plot
-plt.xlabel('MHz')
-plt.ylabel('dB')
-plt.title('FFT of spectrum')
-plt.grid()
-plt.show()
+#plt.xlabel('MHz')
+#plt.ylabel('dB')
+#plt.title('FFT of spectrum')
+#plt.grid()
+#plt.show()
