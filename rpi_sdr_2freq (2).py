@@ -4,7 +4,7 @@ import numpy
 import matplotlib.pyplot as plt
 import time
 import peakutils
-import csv
+import csv 
 
 
 # Function to produce strings with time and date
@@ -42,22 +42,28 @@ def peak_det(spectrum, faxis):
     freq_peak_1 = freq[peaks_index[len(peaks_index)-1]]
     amp_peak_2 = peaks[peaks_index[len(peaks_index)-2]]
     freq_peak_2 = freq[peaks_index[len(peaks_index)-2]]
+    amp_peak_3 = peaks[peaks_index[len(peaks_index)-3]]
+    freq_peak_3 = freq[peaks_index[len(peaks_index)-3]]
+    amp_peak_4 = peaks[peaks_index[len(peaks_index)-4]]
+    freq_peak_4 = freq[peaks_index[len(peaks_index)-4]]
+    amp_peak_5 = peaks[peaks_index[len(peaks_index)-5]]
+    freq_peak_5 = freq[peaks_index[len(peaks_index)-5]]
     
-    return amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, indexes
+    return amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, indexes
 
 # Function to display results and write to a .CSV and .TXT file
-def display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2):
+def display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5):
     # print first 2 detected peaks
-    print('%s %s Peaks: %.2f dB at %.3f MHz and %.2f dB at %.3f MHz\n' % (current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2))
+    print('%s %s Peaks: %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz and %.2f dB at %.3f MHz\n' % (current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5))
         
     # write peaks to a text file
     with open("log.txt","a") as f:
-        f.write('%s %s Peaks: %.2f dB at %.3f MHz and %.2f dB at %.3f MHz\n' % (current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2))
+        f.write('%s %s Peaks: %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz and %.2f dB at %.3f MHz\n' % (current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5))
         
     #write peaks to a .CSV file
     with open('log.csv', 'a') as csvfile:
         writer = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL, lineterminator = '\n')
-        writer.writerow([current_date] + [current_hour] + [amp_peak_1] + [freq_peak_1] + [amp_peak_2] + [freq_peak_2])
+        writer.writerow([current_date] + [current_hour] + [amp_peak_1] + [freq_peak_1] + [amp_peak_2] + [freq_peak_2] + [amp_peak_3] + [freq_peak_3] + [amp_peak_4] + [freq_peak_4] + [amp_peak_5] + [freq_peak_5])
 
 # Function to get samples and create FFT
 def data(sdr):
@@ -109,16 +115,17 @@ sdr = sdr_control(freq)
 spectrum, faxis, samples = data(sdr)
 
 # Detect Peaks   
-amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, indexes = peak_det(spectrum, faxis)
+amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, indexes = peak_det(spectrum, faxis)
 
 # Get current time and date    
 current_date, current_hour, current_time, time_for_save = time_date()
 
 # Save the sampled data for later use if needed 
 numpy.save('%s-%.1fMHz-%.4fMHz-raw_samples' % (time_for_save,freq_mhz,(sdr.sample_rate/1000000)) , samples)
+print ('%s-%.1fMHz-%.4fMHz-raw_samples file saved \n' % (time_for_save,freq_mhz,(sdr.sample_rate/1000000)))
 
 # Record results
-display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2)
+display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5)
 
 # Disconnect SDR
 sdr.close()
@@ -137,16 +144,17 @@ sdr = sdr_control(freq)
 spectrum2, faxis2, samples2 = data(sdr)
 
 # Detect Peaks   
-amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22, indexes2 = peak_det(spectrum2, faxis2)
+amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22, amp_peak_32, freq_peak_32, amp_peak_42, freq_peak_42, amp_peak_52, freq_peak_52, indexes2 = peak_det(spectrum2, faxis2)
 
 # Get current time and date     
 current_date, current_hour, current_time, time_for_save = time_date()
 
 # Save the sampled data for later use if needed 
 numpy.save('%s-%.1fMHz-%.4fMHz-raw_samples' % (time_for_save,freq_mhz,(sdr.sample_rate/1000000)) , samples2)
+print ('%s-%.1fMHz-%.4fMHz-raw_samples file saved \n' % (time_for_save,freq_mhz,(sdr.sample_rate/1000000)))
 
 # Record results
-display_write(current_date, current_hour, amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22)
+display_write(current_date, current_hour, amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22, amp_peak_32, freq_peak_32, amp_peak_42, freq_peak_42, amp_peak_52, freq_peak_52)
 
 # Disconnect SDR
 sdr.close()
