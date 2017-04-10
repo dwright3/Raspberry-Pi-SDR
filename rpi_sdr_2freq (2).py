@@ -106,11 +106,10 @@ def sdr_control(freq):
         sdr.gain = 'auto'
     
     except:
-		
 		# gpio disconnect
 		gpio.cleanup()
 		# exit programme with an error message
-        sys.exit("RTL SDR Device Not Connected\n")
+		sys.exit("RTL SDR Device Not Connected\n")
         
     return sdr
 
@@ -180,7 +179,7 @@ def debug_graph(faxis,spectrum,indexes,faxis2,spectrum2,indexes2):
         
     except:
         
-        print("\nComplete\n")
+        print("Complete\n")
     
     return
 
