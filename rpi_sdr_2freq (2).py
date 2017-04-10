@@ -5,9 +5,10 @@ import matplotlib.pyplot as plt
 import time
 import peakutils
 import csv
+import sys
 import RPi.GPIO as gpio
 
-## Function Definitiona ##
+## Function Definitions ##
 
 # Function to produce strings with time and date
 def time_date():
@@ -95,13 +96,18 @@ def data(sdr):
 #function to set up and configure SDR
 def sdr_control(freq):
 
-    # Create device
-    sdr = RtlSdr()
+    try:
+        # Create device
+        sdr = RtlSdr()
 
-    # configure device
-    sdr.sample_rate = 2.048e6  # Hz
-    sdr.center_freq = freq   # Hz
-    sdr.gain = 'auto'
+        # configure device
+        sdr.sample_rate = 2.048e6  # Hz
+        sdr.center_freq = freq   # Hz
+        sdr.gain = 'auto'
+    
+    except:
+    
+        sys.exit("RTL SDR Device Not Connected")
         
     return sdr
 
@@ -132,6 +138,49 @@ def gpio_switch(chan, state):
     time.sleep(0.5)
     
     return
+	
+# Function to plot the FFT's to aid debuging
+def debug_graph(faxis,spectrum,indexes,faxis2,spectrum2,indexes2):
+    
+    try:
+        # plot the data from the 70MHz sample period
+        plt.plot(faxis,spectrum.real)
+
+        # Plot all detected peaks
+        x = 0
+        while x < len(indexes):
+            plt.plot(faxis[indexes[x]], spectrum.real[indexes[x]], 'ro')
+            x += 1
+
+        # format plot
+        plt.xlabel('MHz')
+        plt.ylabel('dB')
+        plt.title('FFT of spectrum')
+        plt.grid()
+
+        plt.figure()
+        # plot the data from the last sample period
+        plt.plot(faxis2,spectrum2.real)
+
+        # Plot all detected peaks
+        x = 0
+        while x < len(indexes2):
+            plt.plot(faxis2[indexes2[x]], spectrum2.real[indexes2[x]], 'ro')
+            x += 1
+
+        # format plot
+        plt.xlabel('MHz')
+        plt.ylabel('dB')
+        plt.title('FFT of spectrum')
+        plt.grid()
+        plt.show()
+        
+    except:
+        
+        print("/nComplete")
+    
+    return
+
 
 ## Main Body ##
 
@@ -214,35 +263,6 @@ gpio_switch([22,24,26],gpio.LOW)
 # gpio disconnect
 gpio.cleanup()
 
-# graph data to aid debuging
-# plot the date from the last sample period
-#plt.plot(faxis,spectrum.real)
+# Plot FFT's 
+debug_graph(faxis,spectrum,indexes,faxis2,spectrum2,indexes2)
 
-# Plot all detected peaks
-#x = 0
-#while x < len(indexes):
-#    plt.plot(faxis[indexes[x]], spectrum.real[indexes[x]], 'ro')
-#    x += 1
-
-# format plot
-#plt.xlabel('MHz')
-#plt.ylabel('dB')
-#plt.title('FFT of spectrum')
-#plt.grid()
-
-#plt.figure()
-# plot the date from the last sample period
-#plt.plot(faxis2,spectrum2.real)
-
-# Plot all detected peaks
-#x = 0
-#while x < len(indexes2):
-#    plt.plot(faxis2[indexes2[x]], spectrum2.real[indexes2[x]], 'ro')
-#    x += 1
-
-# format plot
-#plt.xlabel('MHz')
-#plt.ylabel('dB')
-#plt.title('FFT of spectrum')
-#plt.grid()
-#plt.show()
