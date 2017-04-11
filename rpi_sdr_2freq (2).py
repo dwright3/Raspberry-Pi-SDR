@@ -8,6 +8,7 @@ import csv
 import sys
 import RPi.GPIO as gpio
 
+
 ## Function Definitions ##
 
 # Function to produce strings with time and date
@@ -75,7 +76,7 @@ def data(sdr):
               
     # now process fft
     spectrum = 20 * numpy.log10(abs(numpy.fft.fft(samples)))
-    print ("fft ready")
+    print ("fft ready\n")
                     
     array_length = len(samples)
         
@@ -182,6 +183,20 @@ def debug_graph(faxis,spectrum,indexes,faxis2,spectrum2,indexes2):
         print("Complete\n")
     
     return
+	
+# Function to save the unprocessed sampled data for possible later use
+def raw_save(time_for_save,freq_mhz,sample_rate,samples):
+    
+    # convert sample rate to MHz
+    sample_rate = sample_rate/1000000
+    
+    # save samples to .NPY file
+    numpy.save('%s-%.1fMHz-%.4fMHz-raw_samples' % (time_for_save,freq_mhz,sample_rate) , samples)
+    
+    # print confirmation of file name used to terminal
+    print ('%s-%.1fMHz-%.4fMHz-raw_samples file saved \n' % (time_for_save,freq_mhz,sample_rate))
+    
+    return 
 
 
 ## Main Body ##
@@ -210,8 +225,7 @@ amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_p
 current_date, current_hour, current_time, time_for_save = time_date()
 
 # Save the sampled data for later use if needed 
-numpy.save('%s-%.1fMHz-%.4fMHz-raw_samples' % (time_for_save,freq_mhz,(sdr.sample_rate/1000000)) , samples)
-print ('%s-%.1fMHz-%.4fMHz-raw_samples file saved \n' % (time_for_save,freq_mhz,(sdr.sample_rate/1000000)))
+raw_save(time_for_save,freq_mhz,sdr.sample_rate, samples)
 
 # Record results
 display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5)
@@ -227,7 +241,7 @@ gpio_switch(18,gpio.LOW)
 # Activate 868MHz antenna
 gpio_switch(16,gpio.HIGH)
 
-# Set second frequency of interest and diplay in MHz
+# Set second frequency of interest and display in MHz
 freq = 868e6
 freq_mhz = freq/1000000
 print("Sampling at %.2f MHz\n" % freq_mhz)
@@ -245,8 +259,7 @@ amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22, amp_peak_32, freq_peak_32,
 current_date, current_hour, current_time, time_for_save = time_date()
 
 # Save the sampled data for later use if needed 
-numpy.save('%s-%.1fMHz-%.4fMHz-raw_samples' % (time_for_save,freq_mhz,(sdr.sample_rate/1000000)) , samples2)
-print ('%s-%.1fMHz-%.4fMHz-raw_samples file saved \n' % (time_for_save,freq_mhz,(sdr.sample_rate/1000000)))
+raw_save(time_for_save,freq_mhz,sdr.sample_rate,samples2)
 
 # Record results
 display_write(current_date, current_hour, amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22, amp_peak_32, freq_peak_32, amp_peak_42, freq_peak_42, amp_peak_52, freq_peak_52)
