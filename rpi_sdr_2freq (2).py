@@ -80,9 +80,18 @@ def data(sdr):
     # Read in samples from the device
     samples = sdr.read_samples(5000)
               
-    # now process fft
-    spectrum = 20 * numpy.log10(abs(numpy.fft.fft(samples)))
-    print ("fft ready\n")
+    # Process fft
+    # take fft of samples
+    fft = numpy.fft.fft(samples)
+    # shift the fft so Fc is at the centre of the plot
+    fft_shift = numpy.fft.fftshift(fft)
+    # convert to dB
+    spectrum = 20 * numpy.log10(abs(fft_shift)) 
+    
+    # below creates fft without shift to centre
+    # spectrum = 20 * numpy.log10(abs(numpy.fft.fft(samples)))
+    
+    print ("FFT ready\n")
                     
     array_length = len(samples)
         
@@ -93,10 +102,12 @@ def data(sdr):
     faxis = []
     k = 0
     while k < array_length:
-        # faxis.append((sdr.center_freq/1000000-fstep*len(spectrum)/2) + k * fstep)
-        faxis.append((sdr.center_freq/1000000) + k * fstep)
+        # create f axis with Fc in the centre
+        faxis.append(((sdr.center_freq/1000000)-(fstep*(len(spectrum)/2))) + k * fstep)
+        # below creates f axis with Fc at the start
+        # faxis.append((sdr.center_freq/1000000) + k * fstep)
         k = k + 1
-    
+
 
     return spectrum, faxis, samples
 
