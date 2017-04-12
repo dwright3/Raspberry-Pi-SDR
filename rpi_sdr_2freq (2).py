@@ -59,16 +59,22 @@ def peak_det(spectrum, faxis):
 def display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5):
     # print first 2 detected peaks
     print('%s %s Peaks: %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz and %.2f dB at %.3f MHz\n' % (current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5))
-        
+
     # write peaks to a text file
     with open("log.txt","a") as f:
         f.write('%s %s Peaks: %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz and %.2f dB at %.3f MHz\n' % (current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5))
         
+    f.close()
+
     #write peaks to a .CSV file
     with open('log.csv', 'a') as csvfile:
         writer = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL, lineterminator = '\n')
         writer.writerow([current_date] + [current_hour] + [amp_peak_1] + [freq_peak_1] + [amp_peak_2] + [freq_peak_2] + [amp_peak_3] + [freq_peak_3] + [amp_peak_4] + [freq_peak_4] + [amp_peak_5] + [freq_peak_5])
 
+    csvfile.close()
+
+    return
+	
 # Function to get samples and create FFT
 def data(sdr):
     # Read in samples from the device
