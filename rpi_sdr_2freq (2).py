@@ -6,9 +6,14 @@ import time
 import peakutils
 import csv
 import sys
-import RPi.GPIO as gpio
 
-
+try:
+    import RPi.GPIO as gpio
+    
+except:
+    print("\nGPIO Pins Not Available on This Device\n")
+ 
+ 
 ## Function Definitions ##
 
 # Function to produce strings with time and date
@@ -74,7 +79,7 @@ def display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_
     csvfile.close()
 
     return
-	
+
 # Function to get samples and create FFT
 def data(sdr):
     # Read in samples from the device
@@ -91,7 +96,7 @@ def data(sdr):
     # below creates fft without shift to centre
     # spectrum = 20 * numpy.log10(abs(numpy.fft.fft(samples)))
     
-    print ("FFT ready\n")
+    print ("FFT Ready\n")
                     
     array_length = len(samples)
         
@@ -111,7 +116,7 @@ def data(sdr):
 
     return spectrum, faxis, samples
 
-#function to set up and configure SDR
+# Function to set up and configure SDR
 def sdr_control(freq):
 
     try:
@@ -124,42 +129,51 @@ def sdr_control(freq):
         sdr.gain = 'auto'
     
     except:
-		# gpio disconnect
-		gpio.cleanup()
-		# exit programme with an error message
-		sys.exit("RTL SDR Device Not Connected\n")
+        # gpio disconnect
+        try:
+            gpio.cleanup()
+        except:
+            print("GPIO Not Deactivated")
+        # exit programme with an error message
+        sys.exit("RTL SDR Device Not Connected\n")
         
     return sdr
 
 # Function to set up Rpi gpio for antenna switching
 def gpio_set():
     
-    # pin numbering mode
-    gpio.setmode(gpio.BOARD)
+    try:
+        # pin numbering mode
+        gpio.setmode(gpio.BOARD)
 
-    # pins to be used
-    chan_list = [16,18,22,24,26]
+        # pins to be used
+        chan_list = [16,18,22,24,26]
 
-    # set pins as outputs
-    gpio.setup(chan_list, gpio.OUT)
-
-    # set all pins low as starting point
-    gpio.output(chan_list, gpio.LOW)
+        # set pins as outputs with an initial value of low
+        gpio.setup(chan_list, gpio.OUT, initial=gpio.LOW)
+    
+    except:
+        print("GPIO Not Setup")
 
     return
 
-# function to switch antennna
+# function to switch antenna
 def gpio_switch(chan, state):
+    
+    try:
 
-    # activate selected gpio
-    gpio.output(chan, state)
+        # activate selected gpio
+        gpio.output(chan, state)
 
-    # wait for switch
-    time.sleep(0.5)
+        # wait for switch
+        time.sleep(0.5)
+    
+    except:
+        print("GPIO Not Switched")
     
     return
-	
-# Function to plot the FFT's to aid debuging
+
+# Function to plot the FFT's to aid debugging
 def debug_graph(faxis,spectrum,indexes,faxis2,spectrum2,indexes2):
     
     try:
@@ -173,9 +187,9 @@ def debug_graph(faxis,spectrum,indexes,faxis2,spectrum2,indexes2):
             x += 1
 
         # format plot
-        plt.xlabel('MHz')
-        plt.ylabel('dB')
-        plt.title('FFT of spectrum')
+        plt.xlabel('Frequency (MHz)')
+        plt.ylabel('Relative Power (dB)')
+        plt.title('FFT of Spectrum')
         plt.grid()
 
         plt.figure()
@@ -189,18 +203,18 @@ def debug_graph(faxis,spectrum,indexes,faxis2,spectrum2,indexes2):
             x += 1
 
         # format plot
-        plt.xlabel('MHz')
-        plt.ylabel('dB')
-        plt.title('FFT of spectrum')
+        plt.xlabel('Frequency (MHz)')
+        plt.ylabel('Relative Power (dB)')
+        plt.title('FFT of Spectrum')
         plt.grid()
         plt.show()
         
     except:
         
-        print("Complete\n")
+        print("\nComplete\n")
     
     return
-	
+
 # Function to save the unprocessed sampled data for possible later use
 def raw_save(time_for_save,freq_mhz,sample_rate,samples):
     
@@ -220,16 +234,16 @@ def raw_save(time_for_save,freq_mhz,sample_rate,samples):
 
 # set up gpio
 gpio_set()
-    
+
 # Set first frequency of interest and display in MHz
 freq = 70e6
 freq_mhz = freq/1000000
 print("Sampling at %.2f MHz\n" % freq_mhz)
 
 # Activate 70MHz antenna
-gpio_switch(18,gpio.HIGH)
+gpio_switch(18,1)
 
-# set up SDR
+# Set up SDR
 sdr = sdr_control(freq)
 
 # Collect Data  
@@ -251,17 +265,17 @@ display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, f
 sdr.close()
 
 # Deactivate 70MHz antenna
-gpio_switch(18,gpio.LOW)
+gpio_switch(18,0)
     
 # Taking second sample
-
-# Activate 868MHz antenna
-gpio_switch(16,gpio.HIGH)
 
 # Set second frequency of interest and display in MHz
 freq = 868e6
 freq_mhz = freq/1000000
 print("Sampling at %.2f MHz\n" % freq_mhz)
+
+# Activate 868MHz antenna
+gpio_switch(16,1)
 
 # Setup SDR
 sdr = sdr_control(freq)
@@ -285,16 +299,17 @@ display_write(current_date, current_hour, amp_peak_12, freq_peak_12, amp_peak_22
 sdr.close()
 
 # Deactivate 868MHz antenna
-gpio_switch(16,gpio.LOW)
+gpio_switch(16,0)
 
-
-# Flash status lights to indicate sucessful completion
-gpio_switch([22,24,26],gpio.HIGH)
-gpio_switch([22,24,26],gpio.LOW)
+# Flash status lights to indicate successful completion
+gpio_switch([22,24,26],1)
+gpio_switch([22,24,26],0)
 
 # gpio disconnect
-gpio.cleanup()
+try:
+    gpio.cleanup()
+except:
+    print("GPIO Not Deactivated")
 
 # Plot FFT's 
 debug_graph(faxis,spectrum,indexes,faxis2,spectrum2,indexes2)
-
