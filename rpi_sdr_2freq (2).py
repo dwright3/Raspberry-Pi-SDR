@@ -126,7 +126,7 @@ def sdr_control(freq):
         # configure device
         sdr.sample_rate = 2.048e6  # Hz
         sdr.center_freq = freq   # Hz
-        sdr.gain = 'auto'
+        sdr.gain = 49
     
     except:
         # gpio disconnect
@@ -236,7 +236,7 @@ def raw_save(time_for_save,freq_mhz,sample_rate,samples):
 gpio_set()
 
 # Set first frequency of interest and display in MHz
-freq = 70e6
+freq = 71e6
 freq_mhz = freq/1000000
 print("Sampling at %.2f MHz\n" % freq_mhz)
 
@@ -270,7 +270,7 @@ gpio_switch(18,0)
 # Taking second sample
 
 # Set second frequency of interest and display in MHz
-freq = 868e6
+freq = 869e6
 freq_mhz = freq/1000000
 print("Sampling at %.2f MHz\n" % freq_mhz)
 
