@@ -6,15 +6,50 @@ import time
 import peakutils
 import csv
 import sys
+import gpsd
 
 try:
     import RPi.GPIO as gpio
     
 except:
-    print("\nGPIO Pins Not Available on This Device\n")
+    print("GPIO Pins Not Available on This Device\n")
  
  
 ## Function Definitions ##
+
+# Function to read GPS location from a USB GPS dongle
+def gps_loc():
+    
+    # Attempt to connect to GPS Dongle
+    try:
+        # Connect to the local gpsd
+        gpsd.connect()
+
+        # Get gps position
+        location = gpsd.get_current()
+
+        # If at least 2D fix (mode 2 or 3) is achieved, save longitude and latitude
+        if location.mode >= 2:
+            lon = location.lon
+            lat = location.lat
+        else:
+            lon = 0
+            lat = 0
+        
+        # If at 3D fix (mode 3) is achieved, save altitude
+        if location.mode >=3:
+            alt = location.alt
+        else:
+            alt = 0
+    
+    # if unable to connect, save dummy variables, alert user and exit
+    except:
+        print('GPS Not Available on This Device\n')
+        lon = 0
+        lat = 0
+        alt = 0
+    
+    return lon, lat, alt
 
 # Function to produce strings with time and date
 def time_date():
@@ -61,20 +96,20 @@ def peak_det(spectrum, faxis):
     return amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, indexes
 
 # Function to display results and write to a .CSV and .TXT file
-def display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5):
+def display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, lon, lat, alt):
     # print first 2 detected peaks
-    print('%s %s Peaks: %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz and %.2f dB at %.3f MHz\n' % (current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5))
+    print('%s %s Peaks: %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz and %.2f dB at %.3f MHz\nLocation: Longitude %.3f, Latitude %.3f, Altitude %.3fm\n' % (current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, lon, lat, alt))
 
     # write peaks to a text file
     with open("log.txt","a") as f:
-        f.write('%s %s Peaks: %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz and %.2f dB at %.3f MHz\n' % (current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5))
+        f.write('%s %s Peaks: %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz and %.2f dB at %.3f MHz Location: Longitude %.3f, Latitude %.3f, Altitude %.3fm\n' % (current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, lon, lat, alt))
         
     f.close()
 
     #write peaks to a .CSV file
     with open('log.csv', 'a') as csvfile:
         writer = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL, lineterminator = '\n')
-        writer.writerow([current_date] + [current_hour] + [amp_peak_1] + [freq_peak_1] + [amp_peak_2] + [freq_peak_2] + [amp_peak_3] + [freq_peak_3] + [amp_peak_4] + [freq_peak_4] + [amp_peak_5] + [freq_peak_5])
+        writer.writerow([current_date] + [current_hour] + [amp_peak_1] + [freq_peak_1] + [amp_peak_2] + [freq_peak_2] + [amp_peak_3] + [freq_peak_3] + [amp_peak_4] + [freq_peak_4] + [amp_peak_5] + [freq_peak_5] + [lon] + [lat] + [alt])
 
     csvfile.close()
 
@@ -98,7 +133,7 @@ def data(sdr):
     
     print ("FFT Ready\n")
                     
-    array_length = len(samples)
+    array_length = len(spectrum)
         
     # create frequency axis, noting that Fc is in centre
     fstep = sdr.sample_rate/len(spectrum) # fft bin size
@@ -232,6 +267,9 @@ def raw_save(time_for_save,freq_mhz,sample_rate,samples):
 
 ## Main Body ##
 
+# Get Location
+lon, lat, alt = gps_loc()
+
 # set up gpio
 gpio_set()
 
@@ -259,7 +297,7 @@ current_date, current_hour, current_time, time_for_save = time_date()
 raw_save(time_for_save,freq_mhz,sdr.sample_rate, samples)
 
 # Record results
-display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5)
+display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, lon, lat, alt)
 
 # Disconnect SDR
 sdr.close()
@@ -293,7 +331,7 @@ current_date, current_hour, current_time, time_for_save = time_date()
 raw_save(time_for_save,freq_mhz,sdr.sample_rate,samples2)
 
 # Record results
-display_write(current_date, current_hour, amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22, amp_peak_32, freq_peak_32, amp_peak_42, freq_peak_42, amp_peak_52, freq_peak_52)
+display_write(current_date, current_hour, amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22, amp_peak_32, freq_peak_32, amp_peak_42, freq_peak_42, amp_peak_52, freq_peak_52, lon, lat, alt)
 
 # Disconnect SDR
 sdr.close()
