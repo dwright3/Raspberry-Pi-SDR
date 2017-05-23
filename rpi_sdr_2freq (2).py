@@ -6,7 +6,8 @@ import time
 import peakutils
 import csv
 import sys
-import gpsd
+#import gpsd
+from gps3 import gps3
 
 try:
     import RPi.GPIO as gpio
@@ -17,31 +18,59 @@ except:
  
 ## Function Definitions ##
 
-# Function to read GPS location from a USB GPS dongle
 def gps_loc():
-    
+            
     # Attempt to connect to GPS Dongle
     try:
-        # Connect to the local gpsd
-        gpsd.connect()
-
-        # Get gps position
-        location = gpsd.get_current()
-
-        # If at least 2D fix (mode 2 or 3) is achieved, save longitude and latitude
-        if location.mode >= 2:
-            lon = location.lon
-            lat = location.lat
-        else:
-            lon = 0
-            lat = 0
+        gps_socket = gps3.GPSDSocket()
+        data_stream = gps3.DataStream()
         
-        # If at 3D fix (mode 3) is achieved, save altitude
-        if location.mode >=3:
-            alt = location.alt
-        else:
-            alt = 0
-    
+        gps_socket.connect()
+        gps_socket.watch()
+        
+        # create counter to monitor number of attempts to find location
+        loc_count = 0
+        
+        # wait for new data
+        for new_data in gps_socket:
+            if new_data:
+                data_stream.unpack(new_data)
+                
+                # Find fix mode of device. 2 or 3 indicate lock. 1 is no lock. n/a is unknown     
+                loc_mode = data_stream.TPV['mode']
+                
+                # if fix mode is known
+                if loc_mode != 'n/a':
+                    #change mode from string to integer
+                    loc_mode = int(loc_mode)
+                    
+                    # If at least 2D fix (mode 2) is achieved, save longitude and latitude with dummy variable for altitude
+                    if loc_mode == 2:
+                        lon = data_stream.TPV['lon']
+                        lat = data_stream.TPV['lat']
+                        alt = 0
+                        break
+                     
+                    # If at 3D fix (mode 3) is achieved, save longitude, latitude and altitude
+                    if loc_mode == 3:
+                        lon = data_stream.TPV['lon']
+                        lat = data_stream.TPV['lat']
+                        alt = data_stream.TPV['alt']
+                        break
+                    
+                # If device takes too long to find location, terminate.
+                if loc_count > 10:
+                    lon = 0
+                    lat = 0
+                    alt = 0
+                    break
+                
+                #advance attempts counter        
+                loc_count += 1
+        
+        #disconnect from GPS
+        gps_socket.close()   
+                
     # if unable to connect, save dummy variables, alert user and exit
     except:
         print('GPS Not Available on This Device\n')
@@ -50,6 +79,40 @@ def gps_loc():
         alt = 0
     
     return lon, lat, alt
+
+# # Function to read GPS location from a USB GPS dongle
+# def gps_loc():
+#      
+#     # Attempt to connect to GPS Dongle
+#     try:
+#         # Connect to the local gpsd
+#         gpsd.connect()
+#  
+#         # Get gps position
+#         location = gpsd.get_current()
+#  
+#         # If at least 2D fix (mode 2 or 3) is achieved, save longitude and latitude
+#         if location.mode >= 2:
+#             lon = location.lon
+#             lat = location.lat
+#         else:
+#             lon = 0
+#             lat = 0
+#          
+#         # If at 3D fix (mode 3) is achieved, save altitude
+#         if location.mode >= 3:
+#             alt = location.alt
+#         else:
+#             alt = 0
+#      
+#     # if unable to connect, save dummy variables, alert user and exit
+#     except:
+#         print('GPS Not Available on This Device\n')
+#         lon = 0
+#         lat = 0
+#         alt = 0
+#      
+#     return lon, lat, alt
 
 # Function to produce strings with time and date
 def time_date():
@@ -269,6 +332,7 @@ def raw_save(time_for_save,freq_mhz,sample_rate,samples):
 
 # Get Location
 lon, lat, alt = gps_loc()
+
 
 # set up gpio
 gpio_set()
