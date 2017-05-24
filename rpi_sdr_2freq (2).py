@@ -8,6 +8,7 @@ import csv
 import sys
 #import gpsd
 from gps3 import gps3
+import schedule
 
 try:
     import RPi.GPIO as gpio
@@ -30,6 +31,7 @@ def gps_loc():
         
         # create counter to monitor number of attempts to find location
         loc_count = 0
+        new_count = 0
         
         # wait for new data
         for new_data in gps_socket:
@@ -52,21 +54,34 @@ def gps_loc():
                         break
                      
                     # If at 3D fix (mode 3) is achieved, save longitude, latitude and altitude
-                    if loc_mode == 3:
+                    elif loc_mode == 3:
                         lon = data_stream.TPV['lon']
                         lat = data_stream.TPV['lat']
                         alt = data_stream.TPV['alt']
                         break
                     
+                    else:
+                        loc_count += 1
+                    
                 # If device takes too long to find location, terminate.
-                if loc_count > 10:
+                elif loc_count > 10:
                     lon = 0
                     lat = 0
                     alt = 0
                     break
                 
                 #advance attempts counter        
-                loc_count += 1
+                else:
+                    loc_count += 1
+        
+            elif new_count > 1000000:
+                lon = 0
+                lat = 0
+                alt = 0
+                break
+            
+            else:
+                new_count += 1
         
         #disconnect from GPS
         gps_socket.close()   
@@ -331,87 +346,95 @@ def raw_save(time_for_save,freq_mhz,sample_rate,samples):
 ## Main Body ##
 
 # Get Location
-lon, lat, alt = gps_loc()
-
-
-# set up gpio
-gpio_set()
-
-# Set first frequency of interest and display in MHz
-freq = 71e6
-freq_mhz = freq/1000000
-print("Sampling at %.2f MHz\n" % freq_mhz)
-
-# Activate 70MHz antenna
-gpio_switch(18,1)
-
-# Set up SDR
-sdr = sdr_control(freq)
-
-# Collect Data  
-spectrum, faxis, samples = data(sdr)
-
-# Detect Peaks   
-amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, indexes = peak_det(spectrum, faxis)
-
-# Get current time and date    
-current_date, current_hour, current_time, time_for_save = time_date()
-
-# Save the sampled data for later use if needed 
-raw_save(time_for_save,freq_mhz,sdr.sample_rate, samples)
-
-# Record results
-display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, lon, lat, alt)
-
-# Disconnect SDR
-sdr.close()
-
-# Deactivate 70MHz antenna
-gpio_switch(18,0)
+def test():
     
-# Taking second sample
+    lon, lat, alt = gps_loc()
+    
+    
+    # set up gpio
+    gpio_set()
+    
+    # Set first frequency of interest and display in MHz
+    freq = 71e6
+    freq_mhz = freq/1000000
+    print("Sampling at %.2f MHz\n" % freq_mhz)
+    
+    # Activate 70MHz antenna
+    gpio_switch(18,1)
+    
+    # Set up SDR
+    sdr = sdr_control(freq)
+    
+    # Collect Data  
+    spectrum, faxis, samples = data(sdr)
+    
+    # Detect Peaks   
+    amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, indexes = peak_det(spectrum, faxis)
+    
+    # Get current time and date    
+    current_date, current_hour, current_time, time_for_save = time_date()
+    
+    # Save the sampled data for later use if needed 
+    raw_save(time_for_save,freq_mhz,sdr.sample_rate, samples)
+    
+    # Record results
+    display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, lon, lat, alt)
+    
+    # Disconnect SDR
+    sdr.close()
+    
+    # Deactivate 70MHz antenna
+    gpio_switch(18,0)
+        
+    # Taking second sample
+    
+    # Set second frequency of interest and display in MHz
+    freq = 869e6
+    freq_mhz = freq/1000000
+    print("Sampling at %.2f MHz\n" % freq_mhz)
+    
+    # Activate 868MHz antenna
+    gpio_switch(16,1)
+    
+    # Setup SDR
+    sdr = sdr_control(freq)
+    
+    # Collect Data    
+    spectrum2, faxis2, samples2 = data(sdr)
+    
+    # Detect Peaks   
+    amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22, amp_peak_32, freq_peak_32, amp_peak_42, freq_peak_42, amp_peak_52, freq_peak_52, indexes2 = peak_det(spectrum2, faxis2)
+    
+    # Get current time and date     
+    current_date, current_hour, current_time, time_for_save = time_date()
+    
+    # Save the sampled data for later use if needed 
+    raw_save(time_for_save,freq_mhz,sdr.sample_rate,samples2)
+    
+    # Record results
+    display_write(current_date, current_hour, amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22, amp_peak_32, freq_peak_32, amp_peak_42, freq_peak_42, amp_peak_52, freq_peak_52, lon, lat, alt)
+    
+    # Disconnect SDR
+    sdr.close()
+    
+    # Deactivate 868MHz antenna
+    gpio_switch(16,0)
+    
+    # Flash status lights to indicate successful completion
+    gpio_switch([22,24,26],1)
+    gpio_switch([22,24,26],0)
+    
+    # gpio disconnect
+    try:
+        gpio.cleanup()
+    except:
+        print("GPIO Not Deactivated")
+    
+    # Plot FFT's 
+    debug_graph(faxis,spectrum,indexes,faxis2,spectrum2,indexes2)
+    
+schedule.every(0.5).minutes.do(test)
 
-# Set second frequency of interest and display in MHz
-freq = 869e6
-freq_mhz = freq/1000000
-print("Sampling at %.2f MHz\n" % freq_mhz)
-
-# Activate 868MHz antenna
-gpio_switch(16,1)
-
-# Setup SDR
-sdr = sdr_control(freq)
-
-# Collect Data    
-spectrum2, faxis2, samples2 = data(sdr)
-
-# Detect Peaks   
-amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22, amp_peak_32, freq_peak_32, amp_peak_42, freq_peak_42, amp_peak_52, freq_peak_52, indexes2 = peak_det(spectrum2, faxis2)
-
-# Get current time and date     
-current_date, current_hour, current_time, time_for_save = time_date()
-
-# Save the sampled data for later use if needed 
-raw_save(time_for_save,freq_mhz,sdr.sample_rate,samples2)
-
-# Record results
-display_write(current_date, current_hour, amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22, amp_peak_32, freq_peak_32, amp_peak_42, freq_peak_42, amp_peak_52, freq_peak_52, lon, lat, alt)
-
-# Disconnect SDR
-sdr.close()
-
-# Deactivate 868MHz antenna
-gpio_switch(16,0)
-
-# Flash status lights to indicate successful completion
-gpio_switch([22,24,26],1)
-gpio_switch([22,24,26],0)
-
-# gpio disconnect
-try:
-    gpio.cleanup()
-except:
-    print("GPIO Not Deactivated")
-
-# Plot FFT's 
-debug_graph(faxis,spectrum,indexes,faxis2,spectrum2,indexes2)
+while True:
+    schedule.run_pending()
+    time.sleep(1)
