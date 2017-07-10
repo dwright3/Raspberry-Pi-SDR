@@ -101,7 +101,7 @@ def gps_loc():
     # Attempt to connect to GPS Dongle
     try:
         # Connect to the local gpsd
-        gpsd.connect()
+        #gpsd.connect()
    
         # Get gps position
         location = gpsd.get_current()
