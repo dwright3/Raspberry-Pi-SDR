@@ -8,7 +8,9 @@ import csv
 import sys
 import gpsd
 #from gps3 import gps3
-import schedule
+#import schedule
+
+
 
 try:
     import RPi.GPIO as gpio
@@ -143,10 +145,23 @@ def time_date():
     return current_date, current_hour, current_time, time_for_save
 
 # Function to detect peaks in the data
-def peak_det(spectrum, faxis):
+def peak_det(spectrum, faxis, freq_mhz):
     # Find peaks in the data using a peak detector (good for more that 1 peak, min_dist needs work)
-    indexes = peakutils.peak.indexes(spectrum.real,thres=0.1, min_dist=250)
-    
+    indexes = peakutils.peak.indexes(spectrum.real,thres=0.2, min_dist=150)
+    #indexes = signal.find_peaks_cwt(spectrum, numpy.arange(1,10))
+       
+    # take an average of the bins either side of the frequency of interest
+    x = 0
+    avg_bin = 0
+    num_bin = 50
+    num_bin_half = 25
+    while x <= num_bin:
+          
+        avg_bin = avg_bin + spectrum[(2500-num_bin_half)+x]
+        x += 1
+        
+    avg_bin = avg_bin/num_bin
+       
     # Make an array of peak amplitudes and corresponding frequencies from detected peak indexes
     x = 0
     peaks = []
@@ -155,22 +170,66 @@ def peak_det(spectrum, faxis):
         peaks.append(spectrum.real[indexes[x]])
         freq.append(faxis[indexes[x]])
         x += 1
-
+        
+    # search for peak at frequency closest to frequency of interest
+    # subtract frequency of interest from frequencies the peaks are detected at.
+    search = []
+    for i in freq:
+        search.append(i - freq_mhz)
+    
+    # convert values to absolute
+    abs_search = numpy.abs(search)
+    
+    # lowest number will be closest to frequency of interest
+    # find the index of this number in the list
+    min_index = numpy.argmin(abs_search)
+    
+    # check peak is close enough to the frequency of interest
+    if (freq_mhz-0.1) < freq[min_index] < (freq_mhz+0.1):
+        # check peak value is within 10 dB of the bin average value 
+        if peaks[min_index] > (avg_bin + 10):
+            #if value is not within 10dB use bin average
+            amp_peak_1 = avg_bin
+            freq_peak_1 = faxis[2500]
+            
+            #print('%.3f dBm' % (avg_bin-144))
+            #print('%.4f MHz'% faxis[2500])
+            #print('peak close and out of value')
+        # if value is within 10dB use value
+        else:
+            amp_peak_1 = peaks[min_index]
+            freq_peak_1 = freq[min_index]
+                        
+            #print('%.3f dBm' % (peaks[min_index]-144))
+            #print('%.4f MHz'% freq[min_index]) 
+            #print('peak close and within 10dB of value')
+    # if peak detected isn't close enough use bin average
+    else:
+        amp_peak_1 = avg_bin
+        freq_peak_1 = faxis[2500]
+        
+        #print('%.3f dBm' % (avg_bin-144))
+        #print('%.4f MHz'% faxis[2500]) 
+        #print('no close peak')
+        
+    #print('%.2f dBm at %.4f MHz' %((spectrum[2498]-144),faxis[2498]))
+    #print('%.2f dBm at %.4f MHz' %((spectrum[2499]-144),faxis[2499]))
+    #print('%.2f dBm at %.4f MHz' %((spectrum[2500]-144),faxis[2500]))
+    #print('%.2f dBm at %.4f MHz' %((spectrum[2501]-144),faxis[2501]))
+    #print('%.2f dBm at %.4f MHz' %((spectrum[2502]-144),faxis[2502]))
     # order detected peaks from small to large
     peaks_index = numpy.argsort(peaks)
     
     # use peak index to retrieve data from data sets
-    amp_peak_1 = peaks[peaks_index[len(peaks_index)-1]]
-    freq_peak_1 = freq[peaks_index[len(peaks_index)-1]]
-    amp_peak_2 = peaks[peaks_index[len(peaks_index)-2]]
-    freq_peak_2 = freq[peaks_index[len(peaks_index)-2]]
-    amp_peak_3 = peaks[peaks_index[len(peaks_index)-3]]
-    freq_peak_3 = freq[peaks_index[len(peaks_index)-3]]
-    amp_peak_4 = peaks[peaks_index[len(peaks_index)-4]]
-    freq_peak_4 = freq[peaks_index[len(peaks_index)-4]]
-    amp_peak_5 = peaks[peaks_index[len(peaks_index)-5]]
-    freq_peak_5 = freq[peaks_index[len(peaks_index)-5]]
-    
+    amp_peak_2 = peaks[peaks_index[len(peaks_index)-1]]
+    freq_peak_2 = freq[peaks_index[len(peaks_index)-1]]
+    amp_peak_3 = peaks[peaks_index[len(peaks_index)-2]]
+    freq_peak_3 = freq[peaks_index[len(peaks_index)-2]]
+    amp_peak_4 = peaks[peaks_index[len(peaks_index)-3]]
+    freq_peak_4 = freq[peaks_index[len(peaks_index)-3]]
+    amp_peak_5 = peaks[peaks_index[len(peaks_index)-4]]
+    freq_peak_5 = freq[peaks_index[len(peaks_index)-4]]
+
     return amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, indexes
 
 # Function to display results and write to a .CSV and .TXT file
@@ -193,23 +252,58 @@ def display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_
 
     return
 
-# Function to get samples and create FFT
-def data(sdr):
+def fft(sdr, num_samples):
+    
     # Read in samples from the device
-    samples = sdr.read_samples(5000)
-              
+    samples = sdr.read_samples(num_samples)
+    
+    w = numpy.hamming(num_samples)            
     # Process fft
     # take fft of samples
-    fft = numpy.fft.fft(samples)
-    # shift the fft so Fc is at the centre of the plot
-    fft_shift = numpy.fft.fftshift(fft)
+    fft = numpy.fft.fft(samples*w)
+    
     # convert to dB
-    spectrum = 20 * numpy.log10(abs(fft_shift)) 
+    spectrum = 20 * numpy.log10(abs(fft*2)) 
+
+    return spectrum
+
+# Function to get samples and create FFT
+def data(sdr, num_avg, num_samples):
+
+    print("Data Capture in Progress........\n") 
     
-    # below creates fft without shift to centre
-    # spectrum = 20 * numpy.log10(abs(numpy.fft.fft(samples)))
+    x = 1
+    a = 1
+    spectrum_avg = numpy.zeros(num_samples)
     
-    print ("FFT Ready\n")
+    while x <= num_avg:
+        #time.sleep(0.1)
+        spectrumA = fft(sdr, num_samples)
+        spectrum_avg = spectrum_avg + spectrumA
+        #print (spectrum_avg)
+        #print (spectrumA)
+        if a == 200:
+            percent_comp = (x/num_avg)*100
+            print("%d Averages Taken" % x)
+            print("Sampling %.2f %% Complete\n"  % percent_comp)
+            
+            a = 1
+        else:
+            a += 1
+        x += 1
+     
+    
+    spectrum = spectrum_avg / num_avg
+    #print (spectrum)
+    
+    #spectrum, faxis, samples = data(sdr)
+    
+    print("Data Capture Complete\n")    
+
+    #print ("FFT Ready\n")
+    
+    # shift the fft so Fc is at the centre of the plot
+    spectrum = numpy.fft.fftshift(spectrum)
                     
     array_length = len(spectrum)
         
@@ -227,7 +321,7 @@ def data(sdr):
         k = k + 1
 
 
-    return spectrum, faxis, samples
+    return spectrum, faxis,spectrumA
 
 # Function to set up and configure SDR
 def sdr_control(freq):
@@ -291,12 +385,12 @@ def debug_graph(faxis,spectrum,indexes,faxis2,spectrum2,indexes2):
     
     try:
         # plot the data from the 70MHz sample period
-        plt.plot(faxis,spectrum.real)
+        plt.plot(faxis,(spectrum.real-144))
 
         # Plot all detected peaks
         x = 0
         while x < len(indexes):
-            plt.plot(faxis[indexes[x]], spectrum.real[indexes[x]], 'ro')
+            plt.plot(faxis[indexes[x]], (spectrum.real[indexes[x]]-144), 'ro')
             x += 1
 
         # format plot
@@ -307,12 +401,12 @@ def debug_graph(faxis,spectrum,indexes,faxis2,spectrum2,indexes2):
 
         plt.figure()
         # plot the data from the last sample period
-        plt.plot(faxis2,spectrum2.real)
+        plt.plot(faxis2,(spectrum2.real-144))
 
         # Plot all detected peaks
         x = 0
         while x < len(indexes2):
-            plt.plot(faxis2[indexes2[x]], spectrum2.real[indexes2[x]], 'ro')
+            plt.plot(faxis2[indexes2[x]], (spectrum2.real[indexes2[x]]-144), 'ro')
             x += 1
 
         # format plot
@@ -347,16 +441,15 @@ def raw_save(time_for_save,freq_mhz,sample_rate,samples):
 
 # Get Location
 def test():
-    
-    # Find current GPS Location
-    lon, lat, alt = gps_loc()
-    
+        
     # Set up GPIO
     gpio_set()
     
     # Set first frequency of interest and display in MHz
     freq = 71e6
     freq_mhz = freq/1000000
+    num_avg = 100
+    num_samples = 5000
     print("Sampling at %.2f MHz\n" % freq_mhz)
     
     # Activate 70MHz antenna
@@ -365,17 +458,20 @@ def test():
     # Set up SDR
     sdr = sdr_control(freq)
     
-    # Collect Data  
-    spectrum, faxis, samples = data(sdr)
+    # Find current GPS Location
+    lon, lat, alt = gps_loc()
+    
+    # Collect Data 
+    spectrum, faxis,samples = data(sdr, num_avg, num_samples)
     
     # Detect Peaks   
-    amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, indexes = peak_det(spectrum, faxis)
+    amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, indexes = peak_det(spectrum, faxis, freq_mhz)
     
     # Get current time and date    
     current_date, current_hour, current_time, time_for_save = time_date()
     
     # Save the sampled data for later use if needed 
-    raw_save(time_for_save,freq_mhz,sdr.sample_rate, samples)
+    raw_save(time_for_save,freq_mhz,sdr.sample_rate, spectrum)
     
     # Record results
     display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, lon, lat, alt)
@@ -389,8 +485,10 @@ def test():
     # Taking second sample
     
     # Set second frequency of interest and display in MHz
-    freq = 869e6
+    freq = 869.525e6
     freq_mhz = freq/1000000
+    num_avg = 100
+    num_samples = 5000
     print("Sampling at %.2f MHz\n" % freq_mhz)
     
     # Activate 868MHz antenna
@@ -399,17 +497,20 @@ def test():
     # Setup SDR
     sdr = sdr_control(freq)
     
-    # Collect Data    
-    spectrum2, faxis2, samples2 = data(sdr)
+    # Find current GPS Location
+    lon, lat, alt = gps_loc()
+    
+    # Collect Data 
+    spectrum2, faxis2,samples2 = data(sdr, num_avg, num_samples)
     
     # Detect Peaks   
-    amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22, amp_peak_32, freq_peak_32, amp_peak_42, freq_peak_42, amp_peak_52, freq_peak_52, indexes2 = peak_det(spectrum2, faxis2)
+    amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22, amp_peak_32, freq_peak_32, amp_peak_42, freq_peak_42, amp_peak_52, freq_peak_52, indexes2 = peak_det(spectrum2, faxis2, freq_mhz)
     
     # Get current time and date     
     current_date, current_hour, current_time, time_for_save = time_date()
     
     # Save the sampled data for later use if needed 
-    raw_save(time_for_save,freq_mhz,sdr.sample_rate,samples2)
+    raw_save(time_for_save,freq_mhz,sdr.sample_rate,spectrum2)
     
     # Record results
     display_write(current_date, current_hour, amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22, amp_peak_32, freq_peak_32, amp_peak_42, freq_peak_42, amp_peak_52, freq_peak_52, lon, lat, alt)
@@ -424,7 +525,7 @@ def test():
     gpio_switch([22,24,26],1)
     gpio_switch([22,24,26],0)
     
-    # gpio disconnect
+    # GPIO disconnect
     try:
         gpio.cleanup()
     except:
@@ -434,8 +535,10 @@ def test():
     debug_graph(faxis,spectrum,indexes,faxis2,spectrum2,indexes2)
     
 
+#THIS PART ACTUALLY MAKES IT RUN#
+
 # Schedule test to run every X minutes
-schedule.every(0.5).minutes.do(test)
+#schedule.every(0.1).minutes.do(test)
 
 # Attempt to connect to GPS device
 try:
@@ -446,12 +549,14 @@ try:
 except:
     print('GPS Not Available on This Device')
 
-# Run Scheduler on constant loop
+# set up never ending loop
 while True:
     # Check for pending tasks
-    schedule.run_pending()
-    # Wait X seconds before checking for pending again
-    time.sleep(1)
+    #schedule.run_pending()
+    # Run test programme
+    test()
+    # Wait X seconds before next loop
+    time.sleep(5)
     
     
     
