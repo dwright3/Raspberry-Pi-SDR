@@ -147,21 +147,9 @@ def time_date():
 # Function to detect peaks in the data
 def peak_det(spectrum, faxis, freq_mhz):
     # Find peaks in the data using a peak detector (good for more that 1 peak, min_dist needs work)
-    indexes = peakutils.peak.indexes(spectrum.real,thres=0.2, min_dist=150)
+    indexes = peakutils.peak.indexes(spectrum.real,thres=0.2, min_dist=50)
     #indexes = signal.find_peaks_cwt(spectrum, numpy.arange(1,10))
-       
-    # take an average of the bins either side of the frequency of interest
-    x = 0
-    avg_bin = 0
-    num_bin = 50
-    num_bin_half = 25
-    while x <= num_bin:
-          
-        avg_bin = avg_bin + spectrum[(2500-num_bin_half)+x]
-        x += 1
-        
-    avg_bin = avg_bin/num_bin
-       
+             
     # Make an array of peak amplitudes and corresponding frequencies from detected peak indexes
     x = 0
     peaks = []
@@ -185,61 +173,118 @@ def peak_det(spectrum, faxis, freq_mhz):
     min_index = numpy.argmin(abs_search)
     
     # check peak is close enough to the frequency of interest
-    if (freq_mhz-0.1) < freq[min_index] < (freq_mhz+0.1):
-        # check peak value is within 10 dB of the bin average value 
-        if peaks[min_index] > (avg_bin + 10):
-            #if value is not within 10dB use bin average
-            amp_peak_1 = avg_bin
-            freq_peak_1 = faxis[2500]
+    if (freq_mhz-0.05) < freq[min_index] < (freq_mhz+0.05):
+        
+        
+        amp_peak_1 = peaks[min_index]
+        freq_peak_1 = freq[min_index]
             
-            #print('%.3f dBm' % (avg_bin-144))
-            #print('%.4f MHz'% faxis[2500])
-            #print('peak close and out of value')
-        # if value is within 10dB use value
-        else:
-            amp_peak_1 = peaks[min_index]
-            freq_peak_1 = freq[min_index]
-                        
-            #print('%.3f dBm' % (peaks[min_index]-144))
-            #print('%.4f MHz'% freq[min_index]) 
-            #print('peak close and within 10dB of value')
+        #print('Primary measurement used')            
+        #print('Close Peak Detected\n')
+        
     # if peak detected isn't close enough use bin average
     else:
-        amp_peak_1 = avg_bin
-        freq_peak_1 = faxis[2500]
         
-        #print('%.3f dBm' % (avg_bin-144))
-        #print('%.4f MHz'% faxis[2500]) 
-        #print('no close peak')
+        # search for bins closest to frequency of interest and save
+        search_freq = []
+        for i in faxis:
+            search_freq.append(i - freq_mhz)
+    
+        # convert values to absolute
+        abs_search_freq = numpy.abs(search_freq)
+    
+        # lowest number will be closest to frequency of interest
+        # find the index of this number in the list
+        min_index_freq = numpy.argmin(abs_search_freq)
+                
+        amp_peak_1 = spectrum[min_index_freq]
+        freq_peak_1 = faxis[min_index_freq]
         
-    #print('%.2f dBm at %.4f MHz' %((spectrum[2498]-144),faxis[2498]))
-    #print('%.2f dBm at %.4f MHz' %((spectrum[2499]-144),faxis[2499]))
-    #print('%.2f dBm at %.4f MHz' %((spectrum[2500]-144),faxis[2500]))
-    #print('%.2f dBm at %.4f MHz' %((spectrum[2501]-144),faxis[2501]))
-    #print('%.2f dBm at %.4f MHz' %((spectrum[2502]-144),faxis[2502]))
+        #print('Central Bin Measurement Recorded') 
+        #print('No Close Peak Detected\n')
+    
+    
+    # take an average of the bins excluding peaks to estimate noise
+
+    avg_bin = 0
+    
+    for i in spectrum:
+        avg_bin = avg_bin + i
+        
+    for i in peaks:
+        avg_bin - i 
+    
+    avg_bin = avg_bin/(len(spectrum)-len(peaks))
+    
+    #print('Primary Measurement:')    
+    #print('%.3f dBm' % (peaks[min_index]-144))
+    #print('%.4f MHz'% freq[min_index]) 
+    
+    #print('\nEstimated Noise Measurement:')    
+    #print('%.3f dBm' % (avg_bin-144))
+    #print('%.4f MHz'% faxis[2500]) 
+        
     # order detected peaks from small to large
     peaks_index = numpy.argsort(peaks)
     
+    # use peak index to retrieve data from data sets, insert dummy data if the peak index is not long enough (less than 4 peaks detected)
+    x = 0
+    
+    if x < len(peaks_index):
+        amp_peak_2 = peaks[peaks_index[len(peaks_index)-1]]
+        freq_peak_2 = freq[peaks_index[len(peaks_index)-1]]
+        
+        x+=1
+    
+    else:
+        amp_peak_2 = 0
+        freq_peak_2 = 0
+        
+    if x < len(peaks_index):
+        amp_peak_3 = peaks[peaks_index[len(peaks_index)-2]]
+        freq_peak_3 = freq[peaks_index[len(peaks_index)-2]]
+        
+        x+=1
+    
+    else:
+        amp_peak_3 = 0
+        freq_peak_3 = 0
+        
+    if x < len(peaks_index):
+        amp_peak_4 = peaks[peaks_index[len(peaks_index)-3]]
+        freq_peak_4 = freq[peaks_index[len(peaks_index)-3]]
+        
+        x+=1
+    
+    else:
+        amp_peak_4 = 0
+        freq_peak_4 = 0
+        
+    
+    # Save noise measurement 
+    amp_peak_5 = avg_bin
+    freq_peak_5 = 'noise'
+        
     # use peak index to retrieve data from data sets
-    amp_peak_2 = peaks[peaks_index[len(peaks_index)-1]]
-    freq_peak_2 = freq[peaks_index[len(peaks_index)-1]]
-    amp_peak_3 = peaks[peaks_index[len(peaks_index)-2]]
-    freq_peak_3 = freq[peaks_index[len(peaks_index)-2]]
-    amp_peak_4 = peaks[peaks_index[len(peaks_index)-3]]
-    freq_peak_4 = freq[peaks_index[len(peaks_index)-3]]
-    amp_peak_5 = peaks[peaks_index[len(peaks_index)-4]]
-    freq_peak_5 = freq[peaks_index[len(peaks_index)-4]]
+    #amp_peak_2 = peaks[peaks_index[len(peaks_index)-1]]
+    #freq_peak_2 = freq[peaks_index[len(peaks_index)-1]]
+    #amp_peak_3 = peaks[peaks_index[len(peaks_index)-2]]
+    #freq_peak_3 = freq[peaks_index[len(peaks_index)-2]]
+    #amp_peak_4 = peaks[peaks_index[len(peaks_index)-3]]
+    #freq_peak_4 = freq[peaks_index[len(peaks_index)-3]]
+    #amp_peak_5 = peaks[peaks_index[len(peaks_index)-4]]
+    #freq_peak_5 = freq[peaks_index[len(peaks_index)-4]]
 
     return amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, indexes
 
 # Function to display results and write to a .CSV and .TXT file
 def display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, lon, lat, alt):
     # print first 2 detected peaks
-    print('%s %s Peaks: %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz and %.2f dB at %.3f MHz\nLocation: Longitude %.3f, Latitude %.3f, Altitude %.3fm\n' % (current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, lon, lat, alt))
+    print('%s %s Peaks: %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz and %.2f dB for %s \nLocation: Longitude %.3f, Latitude %.3f, Altitude %.3fm\n' % (current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, lon, lat, alt))
 
     # write peaks to a text file
     with open("log.txt","a") as f:
-        f.write('%s %s Peaks: %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz and %.2f dB at %.3f MHz Location: Longitude %.3f, Latitude %.3f, Altitude %.3fm\n' % (current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, lon, lat, alt))
+        f.write('%s %s Peaks: %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz, %.2f dB at %.3f MHz and %.2f dB for %s Location: Longitude %.3f, Latitude %.3f, Altitude %.3fm\n' % (current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, lon, lat, alt))
         
     f.close()
 
@@ -332,7 +377,7 @@ def sdr_control(freq):
 
         # configure device
         sdr.sample_rate = 2.048e6  # Hz
-        sdr.center_freq = freq   # Hz
+        sdr.center_freq = freq+0.1e6   # Hz
         sdr.gain = 49
     
     except:
@@ -381,39 +426,82 @@ def gpio_switch(chan, state):
     return
 
 # Function to plot the FFT's to aid debugging
-def debug_graph(faxis,spectrum,indexes,faxis2,spectrum2,indexes2):
+def debug_graph(faxis,spectrum,indexes, amp_peak_1, freq_peak_1, amp_peak_5, faxis2,spectrum2,indexes2, amp_peak_12, freq_peak_12, amp_peak_52):
+    
     
     try:
+        
+        freq_offset = 0.1
+        peak_search_range = 0.05
+        
         # plot the data from the 70MHz sample period
         plt.plot(faxis,(spectrum.real-144))
+        
+        # plot noise level
+        plt.plot([faxis[0],faxis[4999]],[(amp_peak_5-144),(amp_peak_5-144)], 'r--',linewidth=5)
+        
+        plt.plot([(faxis[2500]-peak_search_range-freq_offset),(faxis[2500]-peak_search_range-freq_offset)],[(max(spectrum)-144),(min(spectrum)-144)], 'k:',linewidth=2.5)
+        plt.plot([(faxis[2500]+peak_search_range-freq_offset),(faxis[2500]+peak_search_range-freq_offset)],[(max(spectrum)-144),(min(spectrum)-144)], 'k:',linewidth=2.5)
 
         # Plot all detected peaks
         x = 0
         while x < len(indexes):
-            plt.plot(faxis[indexes[x]], (spectrum.real[indexes[x]]-144), 'ro')
+            plt.plot(faxis[indexes[x]], (spectrum.real[indexes[x]]-144), 'go')
             x += 1
+            
+        # annotate plot with highest peak    
+        plt.annotate('Observed Peak Power \n %.1f dBm \n %.3f MHz'%((amp_peak_1-144), freq_peak_1),
+             xy=(freq_peak_1, (amp_peak_1-144)), xycoords='data',
+             xytext=(0.65, 0.75), textcoords='figure fraction' ,
+             arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.2"))
+        
+        # annotate plot with noise value    
+        plt.annotate('Estimated Noise \n %.1f dBm'%((amp_peak_5-144)),
+             xy=(faxis[2500], (amp_peak_5-144)), xycoords='data',
+             xytext=(0.2, 0.8), textcoords='figure fraction')
 
         # format plot
         plt.xlabel('Frequency (MHz)')
-        plt.ylabel('Relative Power (dB)')
+        plt.ylabel('Received Power (dBm)')
         plt.title('FFT of Spectrum')
         plt.grid()
+        plt.autoscale(enable=True, axis='x', tight=True)
 
         plt.figure()
         # plot the data from the last sample period
         plt.plot(faxis2,(spectrum2.real-144))
+        
+        # plot noise level
+        plt.plot([faxis2[0],faxis2[4999]],[(amp_peak_52-144),(amp_peak_52-144)], 'r--',linewidth=5)
+        
+        plt.plot([(faxis2[2500]-peak_search_range-freq_offset),(faxis2[2500]-peak_search_range-freq_offset)],[(max(spectrum2)-144),(min(spectrum2)-144)], 'k:',linewidth=2.5)
+        plt.plot([(faxis2[2500]+peak_search_range-freq_offset),(faxis2[2500]+peak_search_range-freq_offset)],[(max(spectrum2)-144),(min(spectrum2)-144)], 'k:',linewidth=2.5)
 
         # Plot all detected peaks
         x = 0
         while x < len(indexes2):
-            plt.plot(faxis2[indexes2[x]], (spectrum2.real[indexes2[x]]-144), 'ro')
+            plt.plot(faxis2[indexes2[x]], (spectrum2.real[indexes2[x]]-144), 'go')
             x += 1
+
+        # annotate plot with highest peak
+        plt.annotate('Observed Peak Power \n %.1f dBm \n %.3f MHz'%((amp_peak_12-144), freq_peak_12),
+             xy=(freq_peak_12, (amp_peak_12-144)), xycoords='data',
+             xytext=(0.65, 0.75), textcoords='figure fraction',
+             arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.2"))
+        
+        # annotate plot with noise value    
+        plt.annotate('Estimated Noise \n %.1f dBm'%((amp_peak_52-144)),
+             xy=(faxis2[2500], (amp_peak_52-144)), xycoords='data',
+             xytext=(0.2, 0.8), textcoords='figure fraction')
 
         # format plot
         plt.xlabel('Frequency (MHz)')
-        plt.ylabel('Relative Power (dB)')
+        plt.ylabel('Received Power (dBm)')
         plt.title('FFT of Spectrum')
         plt.grid()
+        plt.autoscale(enable=True, axis='x', tight=True)
+        
+        
         plt.show()
         
     except:
@@ -489,7 +577,7 @@ def test():
     freq_mhz = freq/1000000
     num_avg = 100
     num_samples = 5000
-    print("Sampling at %.2f MHz\n" % freq_mhz)
+    print("Sampling at %.3f MHz\n" % freq_mhz)
     
     # Activate 868MHz antenna
     gpio_switch(16,1)
@@ -532,7 +620,7 @@ def test():
         print("GPIO Not Deactivated")
     
     # Plot FFT's 
-    debug_graph(faxis,spectrum,indexes,faxis2,spectrum2,indexes2)
+    #debug_graph(faxis,spectrum,indexes, amp_peak_1, freq_peak_1,amp_peak_5,faxis2,spectrum2,indexes2, amp_peak_12, freq_peak_12,amp_peak_52)
     
 
 #THIS PART ACTUALLY MAKES IT RUN#
@@ -556,7 +644,7 @@ while True:
     # Run test programme
     test()
     # Wait X seconds before next loop
-    time.sleep(5)
+    time.sleep(10)
     
     
     
