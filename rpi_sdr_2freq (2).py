@@ -212,8 +212,8 @@ def peak_det(spectrum, faxis, freq_mhz):
         avg_bin = avg_bin + i
         
     for i in peaks:
-        avg_bin - i 
-    
+        avg_bin = avg_bin - i 
+  
     avg_bin = avg_bin/(len(spectrum)-len(peaks))
     
     #print('Primary Measurement:')    
@@ -299,17 +299,20 @@ def display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_
 
 def fft(sdr, num_samples):
     
-    # Read in samples from the device
-    samples = sdr.read_samples(num_samples)
+    try:
+        # Read in samples from the device
+        samples = sdr.read_samples(num_samples)
     
-    w = numpy.hamming(num_samples)            
-    # Process fft
-    # take fft of samples
-    fft = numpy.fft.fft(samples*w)
+        w = numpy.hamming(num_samples)            
+        # Process fft
+        # take fft of samples
+        fft = numpy.fft.fft(samples*w)
+        
+        # convert to dB
+        spectrum = 20 * numpy.log10(abs(fft*2)) 
     
-    # convert to dB
-    spectrum = 20 * numpy.log10(abs(fft*2)) 
-
+    except:
+        spectrum = 0
     return spectrum
 
 # Function to get samples and create FFT
@@ -369,9 +372,10 @@ def data(sdr, num_avg, num_samples):
     return spectrum, faxis,spectrumA
 
 # Function to set up and configure SDR
-def sdr_control(freq):
-
+def sdr_control(freq,i,flag):
+    
     try:
+        
         # Create device
         sdr = RtlSdr()
 
@@ -379,17 +383,34 @@ def sdr_control(freq):
         sdr.sample_rate = 2.048e6  # Hz
         sdr.center_freq = freq+0.1e6   # Hz
         sdr.gain = 49
+        
+        return sdr, flag
     
     except:
-        # gpio disconnect
-        try:
-            gpio.cleanup()
-        except:
-            print("GPIO Not Deactivated")
-        # exit programme with an error message
-        sys.exit("RTL SDR Device Not Connected\n")
         
-    return sdr
+        print("RTL SDR Communication Error")
+        
+        flag = True
+        
+        if i <= 60:
+            
+            time.sleep(1)
+            print("Attempting to Re-establish Connection...... Attempt: %d\n" %i)
+            i = i + 1
+            sdr, flag = sdr_control(freq,i,flag)
+            
+        else:
+            
+            # gpio disconnect
+            try:
+                gpio.cleanup()
+            except:
+                print("GPIO Not Deactivated")
+            
+            # exit programme with an error message
+            sys.exit("RTL SDR Device Not Connected\n")
+       
+    return sdr, flag
 
 # Function to set up Rpi gpio for antenna switching
 def gpio_set():
@@ -435,19 +456,28 @@ def debug_graph(faxis,spectrum,indexes, amp_peak_1, freq_peak_1, amp_peak_5, fax
         peak_search_range = 0.05
         
         # plot the data from the 70MHz sample period
-        plt.plot(faxis,(spectrum.real-144))
+        plt.plot(faxis,(spectrum.real-144), label='Received Power')
         
         # plot noise level
-        plt.plot([faxis[0],faxis[4999]],[(amp_peak_5-144),(amp_peak_5-144)], 'r--',linewidth=5)
+        plt.plot([faxis[0],faxis[4999]],[(amp_peak_5-144),(amp_peak_5-144)], 'r--',linewidth=5, label='Estimated Noise Level')
         
-        plt.plot([(faxis[2500]-peak_search_range-freq_offset),(faxis[2500]-peak_search_range-freq_offset)],[(max(spectrum)-144),(min(spectrum)-144)], 'k:',linewidth=2.5)
-        plt.plot([(faxis[2500]+peak_search_range-freq_offset),(faxis[2500]+peak_search_range-freq_offset)],[(max(spectrum)-144),(min(spectrum)-144)], 'k:',linewidth=2.5)
+        # determine min and max of y axis
+        axes = plt.gca()
+        ymin, ymax = axes.get_ylim()
+        
+        #Plot limits that peaks are searched for within
+        plt.plot([(faxis[2500]-peak_search_range-freq_offset),(faxis[2500]-peak_search_range-freq_offset)],[ymax,ymin], 'k:',linewidth=2.5, label = 'Peak Search Limits')
+        plt.plot([(faxis[2500]+peak_search_range-freq_offset),(faxis[2500]+peak_search_range-freq_offset)],[ymax,ymin], 'k:',linewidth=2.5)
 
         # Plot all detected peaks
-        x = 0
-        while x < len(indexes):
-            plt.plot(faxis[indexes[x]], (spectrum.real[indexes[x]]-144), 'go')
-            x += 1
+        plot_peak_freq = []
+        plot_peak_amp = []
+        for i in indexes:
+            plot_peak_freq.append(faxis[i])
+            plot_peak_amp.append((spectrum.real[i]-144))
+            
+            
+        plt.plot(plot_peak_freq, plot_peak_amp, 'go', label = 'Detected Peaks')
             
         # annotate plot with highest peak    
         plt.annotate('Observed Peak Power \n %.1f dBm \n %.3f MHz'%((amp_peak_1-144), freq_peak_1),
@@ -458,30 +488,39 @@ def debug_graph(faxis,spectrum,indexes, amp_peak_1, freq_peak_1, amp_peak_5, fax
         # annotate plot with noise value    
         plt.annotate('Estimated Noise \n %.1f dBm'%((amp_peak_5-144)),
              xy=(faxis[2500], (amp_peak_5-144)), xycoords='data',
-             xytext=(0.2, 0.8), textcoords='figure fraction')
+             xytext=(0.2, 0.6), textcoords='figure fraction')
 
         # format plot
         plt.xlabel('Frequency (MHz)')
         plt.ylabel('Received Power (dBm)')
         plt.title('FFT of Spectrum')
         plt.grid()
+        plt.legend(loc='upper left',fontsize ='small')
         plt.autoscale(enable=True, axis='x', tight=True)
 
         plt.figure()
         # plot the data from the last sample period
-        plt.plot(faxis2,(spectrum2.real-144))
+        plt.plot(faxis2,(spectrum2.real-144), label = 'Received Power')
         
         # plot noise level
-        plt.plot([faxis2[0],faxis2[4999]],[(amp_peak_52-144),(amp_peak_52-144)], 'r--',linewidth=5)
+        plt.plot([faxis2[0],faxis2[4999]],[(amp_peak_52-144),(amp_peak_52-144)], 'r--',linewidth=5, label = 'Estimated Noise Level')
         
-        plt.plot([(faxis2[2500]-peak_search_range-freq_offset),(faxis2[2500]-peak_search_range-freq_offset)],[(max(spectrum2)-144),(min(spectrum2)-144)], 'k:',linewidth=2.5)
-        plt.plot([(faxis2[2500]+peak_search_range-freq_offset),(faxis2[2500]+peak_search_range-freq_offset)],[(max(spectrum2)-144),(min(spectrum2)-144)], 'k:',linewidth=2.5)
+        # determine min and max of y axis
+        axes = plt.gca()
+        ymin, ymax = axes.get_ylim()
+        
+        #Plot limits that peaks are searched for within
+        plt.plot([(faxis2[2500]-peak_search_range-freq_offset),(faxis2[2500]-peak_search_range-freq_offset)],[ymax,ymin], 'k:',linewidth=2.5, label = 'Peak search Limits')
+        plt.plot([(faxis2[2500]+peak_search_range-freq_offset),(faxis2[2500]+peak_search_range-freq_offset)],[ymax,ymin], 'k:',linewidth=2.5)
 
         # Plot all detected peaks
-        x = 0
-        while x < len(indexes2):
-            plt.plot(faxis2[indexes2[x]], (spectrum2.real[indexes2[x]]-144), 'go')
-            x += 1
+        plot_peak_freq2 = []
+        plot_peak_amp2 = []
+        for i in indexes2:
+            plot_peak_freq2.append(faxis2[i])
+            plot_peak_amp2.append((spectrum2.real[i]-144))
+            
+        plt.plot(plot_peak_freq2, plot_peak_amp2, 'go', label = 'Detected Peaks')
 
         # annotate plot with highest peak
         plt.annotate('Observed Peak Power \n %.1f dBm \n %.3f MHz'%((amp_peak_12-144), freq_peak_12),
@@ -492,13 +531,14 @@ def debug_graph(faxis,spectrum,indexes, amp_peak_1, freq_peak_1, amp_peak_5, fax
         # annotate plot with noise value    
         plt.annotate('Estimated Noise \n %.1f dBm'%((amp_peak_52-144)),
              xy=(faxis2[2500], (amp_peak_52-144)), xycoords='data',
-             xytext=(0.2, 0.8), textcoords='figure fraction')
+             xytext=(0.2, 0.6), textcoords='figure fraction')
 
         # format plot
         plt.xlabel('Frequency (MHz)')
         plt.ylabel('Received Power (dBm)')
         plt.title('FFT of Spectrum')
         plt.grid()
+        plt.legend(loc='upper left',fontsize ='small')
         plt.autoscale(enable=True, axis='x', tight=True)
         
         
@@ -528,7 +568,7 @@ def raw_save(time_for_save,freq_mhz,sample_rate,samples):
 ## Main Body ##
 
 # Get Location
-def test():
+def test(flag):
         
     # Set up GPIO
     gpio_set()
@@ -543,8 +583,11 @@ def test():
     # Activate 70MHz antenna
     gpio_switch(18,1)
     
+    #RTL re-connections counter
+    i = 1
+    
     # Set up SDR
-    sdr = sdr_control(freq)
+    sdr, flag = sdr_control(freq,i,flag)
     
     # Find current GPS Location
     lon, lat, alt = gps_loc()
@@ -582,8 +625,11 @@ def test():
     # Activate 868MHz antenna
     gpio_switch(16,1)
     
+    #RTL re-connections counter
+    i = 1
+    
     # Setup SDR
-    sdr = sdr_control(freq)
+    sdr, flag = sdr_control(freq,i,flag)
     
     # Find current GPS Location
     lon, lat, alt = gps_loc()
@@ -620,8 +666,9 @@ def test():
         print("GPIO Not Deactivated")
     
     # Plot FFT's 
-    #debug_graph(faxis,spectrum,indexes, amp_peak_1, freq_peak_1,amp_peak_5,faxis2,spectrum2,indexes2, amp_peak_12, freq_peak_12,amp_peak_52)
+    debug_graph(faxis,spectrum,indexes, amp_peak_1, freq_peak_1,amp_peak_5,faxis2,spectrum2,indexes2, amp_peak_12, freq_peak_12,amp_peak_52)
     
+    return flag
 
 #THIS PART ACTUALLY MAKES IT RUN#
 
@@ -637,14 +684,22 @@ try:
 except:
     print('GPS Not Available on This Device')
 
+flag = False
+
 # set up never ending loop
 while True:
     # Check for pending tasks
     #schedule.run_pending()
     # Run test programme
-    test()
+    flag = test(flag)
+
+    
+    if flag == True:
+        print('\nThis Device Has Recovered From a Communication Error\n' )
+    
+#     if flag == False:
+#         print('\nThis Device Has Not Recovered From a Communication Error\n' )
+    
     # Wait X seconds before next loop
-    time.sleep(10)
-    
-    
+    time.sleep(5)
     
