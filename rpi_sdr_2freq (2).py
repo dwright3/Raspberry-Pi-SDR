@@ -7,6 +7,7 @@ import peakutils
 import csv
 import sys
 import gpsd
+from sys import stderr
 #from gps3 import gps3
 #import schedule
 
@@ -313,6 +314,7 @@ def fft(sdr, num_samples):
     
     except:
         spectrum = 0
+        
     return spectrum
 
 # Function to get samples and create FFT
@@ -607,8 +609,13 @@ def test(flag):
     # Record results
     display_write(current_date, current_hour, amp_peak_1, freq_peak_1, amp_peak_2, freq_peak_2, amp_peak_3, freq_peak_3, amp_peak_4, freq_peak_4, amp_peak_5, freq_peak_5, lon, lat, alt)
     
-    # Disconnect SDR
-    sdr.close()
+    try:
+        # Disconnect SDR
+        sdr.close()
+        
+    except:
+        
+        print('\nFailed to Close RTL SDR\n' )
     
     # Deactivate 70MHz antenna
     gpio_switch(18,0)
@@ -649,8 +656,14 @@ def test(flag):
     # Record results
     display_write(current_date, current_hour, amp_peak_12, freq_peak_12, amp_peak_22, freq_peak_22, amp_peak_32, freq_peak_32, amp_peak_42, freq_peak_42, amp_peak_52, freq_peak_52, lon, lat, alt)
     
-    # Disconnect SDR
-    sdr.close()
+    try:
+        # Disconnect SDR
+        sdr.close()
+        
+    except:
+        
+        print('\nFailed to Close RTL SDR\n' )
+        
     
     # Deactivate 868MHz antenna
     gpio_switch(16,0)
@@ -691,9 +704,10 @@ while True:
     # Check for pending tasks
     #schedule.run_pending()
     # Run test programme
-    flag = test(flag)
-
     
+    flag = test(flag)
+        
+   
     if flag == True:
         print('\nThis Device Has Recovered From a Communication Error\n' )
     
