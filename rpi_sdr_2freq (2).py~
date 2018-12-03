@@ -7,6 +7,7 @@ import peakutils
 import csv
 import sys
 import gpsd
+from sys import stderr
 #from gps3 import gps3
 #import schedule
 
@@ -313,7 +314,7 @@ def fft(sdr, num_samples):
     
     except:
         spectrum = 0
-                
+        
     return spectrum
 
 # Function to get samples and create FFT
@@ -331,7 +332,7 @@ def data(sdr, num_avg, num_samples):
         spectrum_avg = spectrum_avg + spectrumA
         #print (spectrum_avg)
         #print (spectrumA)
-        if a == 100:
+        if a == 200:
             percent_comp = (x/num_avg)*100
             print("%d Averages Taken" % x)
             print("Sampling %.2f %% Complete\n"  % percent_comp)
@@ -383,7 +384,7 @@ def sdr_control(freq,i,flag):
         # configure device
         sdr.sample_rate = 2.048e6  # Hz
         sdr.center_freq = freq+0.1e6   # Hz
-        sdr.gain = 49#25.4 #49 #0
+        sdr.gain = 49
         
         return sdr, flag
     
@@ -450,8 +451,6 @@ def gpio_switch(chan, state):
 # Function to plot the FFT's to aid debugging
 def debug_graph(faxis,spectrum,indexes, amp_peak_1, freq_peak_1, amp_peak_5, faxis2,spectrum2,indexes2, amp_peak_12, freq_peak_12, amp_peak_52):
     
-    cal_factor_868 = -98 #-84 #-144
-    cal_factor = -89
     
     try:
         
@@ -459,10 +458,10 @@ def debug_graph(faxis,spectrum,indexes, amp_peak_1, freq_peak_1, amp_peak_5, fax
         peak_search_range = 0.05
         
         # plot the data from the 70MHz sample period
-        plt.plot(faxis,(spectrum.real+cal_factor), label='Received Power')
+        plt.plot(faxis,(spectrum.real-144), label='Received Power')
         
         # plot noise level
-        plt.plot([faxis[0],faxis[4999]],[(amp_peak_5+cal_factor),(amp_peak_5+cal_factor)], 'r--',linewidth=5, label='Estimated Noise Level')
+        plt.plot([faxis[0],faxis[4999]],[(amp_peak_5-144),(amp_peak_5-144)], 'r--',linewidth=5, label='Estimated Noise Level')
         
         # determine min and max of y axis
         axes = plt.gca()
@@ -477,20 +476,20 @@ def debug_graph(faxis,spectrum,indexes, amp_peak_1, freq_peak_1, amp_peak_5, fax
         plot_peak_amp = []
         for i in indexes:
             plot_peak_freq.append(faxis[i])
-            plot_peak_amp.append((spectrum.real[i]+cal_factor))
+            plot_peak_amp.append((spectrum.real[i]-144))
             
             
         plt.plot(plot_peak_freq, plot_peak_amp, 'go', label = 'Detected Peaks')
             
         # annotate plot with highest peak    
-        plt.annotate('Observed Peak Power \n %.1f dBm \n %.3f MHz'%((amp_peak_1+cal_factor), freq_peak_1),
-             xy=(freq_peak_1, (amp_peak_1+cal_factor)), xycoords='data',
+        plt.annotate('Observed Peak Power \n %.1f dBm \n %.3f MHz'%((amp_peak_1-144), freq_peak_1),
+             xy=(freq_peak_1, (amp_peak_1-144)), xycoords='data',
              xytext=(0.65, 0.75), textcoords='figure fraction' ,
              arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.2"))
         
         # annotate plot with noise value    
-        plt.annotate('Estimated Noise \n %.1f dBm'%((amp_peak_5+cal_factor)),
-             xy=(faxis[2500], (amp_peak_5+cal_factor)), xycoords='data',
+        plt.annotate('Estimated Noise \n %.1f dBm'%((amp_peak_5-144)),
+             xy=(faxis[2500], (amp_peak_5-144)), xycoords='data',
              xytext=(0.2, 0.6), textcoords='figure fraction')
 
         # format plot
@@ -503,10 +502,10 @@ def debug_graph(faxis,spectrum,indexes, amp_peak_1, freq_peak_1, amp_peak_5, fax
 
         plt.figure()
         # plot the data from the last sample period
-        plt.plot(faxis2,(spectrum2.real+cal_factor_868), label = 'Received Power')
+        plt.plot(faxis2,(spectrum2.real-144), label = 'Received Power')
         
         # plot noise level
-        plt.plot([faxis2[0],faxis2[4999]],[(amp_peak_52+cal_factor_868),(amp_peak_52+cal_factor_868)], 'r--',linewidth=5, label = 'Estimated Noise Level')
+        plt.plot([faxis2[0],faxis2[4999]],[(amp_peak_52-144),(amp_peak_52-144)], 'r--',linewidth=5, label = 'Estimated Noise Level')
         
         # determine min and max of y axis
         axes = plt.gca()
@@ -521,19 +520,19 @@ def debug_graph(faxis,spectrum,indexes, amp_peak_1, freq_peak_1, amp_peak_5, fax
         plot_peak_amp2 = []
         for i in indexes2:
             plot_peak_freq2.append(faxis2[i])
-            plot_peak_amp2.append((spectrum2.real[i]+cal_factor_868))
+            plot_peak_amp2.append((spectrum2.real[i]-144))
             
         plt.plot(plot_peak_freq2, plot_peak_amp2, 'go', label = 'Detected Peaks')
 
         # annotate plot with highest peak
-        plt.annotate('Observed Peak Power \n %.1f dBm \n %.3f MHz'%((amp_peak_12+cal_factor_868), freq_peak_12),
-             xy=(freq_peak_12, (amp_peak_12+cal_factor_868)), xycoords='data',
+        plt.annotate('Observed Peak Power \n %.1f dBm \n %.3f MHz'%((amp_peak_12-144), freq_peak_12),
+             xy=(freq_peak_12, (amp_peak_12-144)), xycoords='data',
              xytext=(0.65, 0.75), textcoords='figure fraction',
              arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.2"))
         
         # annotate plot with noise value    
-        plt.annotate('Estimated Noise \n %.1f dBm'%((amp_peak_52+cal_factor_868)),
-             xy=(faxis2[2500], (amp_peak_52+cal_factor_868)), xycoords='data',
+        plt.annotate('Estimated Noise \n %.1f dBm'%((amp_peak_52-144)),
+             xy=(faxis2[2500], (amp_peak_52-144)), xycoords='data',
              xytext=(0.2, 0.6), textcoords='figure fraction')
 
         # format plot
@@ -572,10 +571,7 @@ def raw_save(time_for_save,freq_mhz,sample_rate,samples):
 
 # Get Location
 def test(flag):
-    
-    #start_time = time.time()
-    #print("--- %s seconds ---" % (time.time() - start_time))
-    
+        
     # Set up GPIO
     gpio_set()
     
@@ -681,8 +677,8 @@ def test(flag):
         gpio.cleanup()
     except:
         print("GPIO Not Deactivated")
-        
-    # Plot FFT's    
+    
+    # Plot FFT's 
     debug_graph(faxis,spectrum,indexes, amp_peak_1, freq_peak_1,amp_peak_5,faxis2,spectrum2,indexes2, amp_peak_12, freq_peak_12,amp_peak_52)
     
     return flag
@@ -715,8 +711,8 @@ while True:
     if flag == True:
         print('\nThis Device Has Recovered From a Communication Error\n' )
     
-    if flag == False:
-        print('\nThis Device Has Not Recovered From a Communication Error\n' )
+#     if flag == False:
+#         print('\nThis Device Has Not Recovered From a Communication Error\n' )
     
     # Wait X seconds before next loop
     time.sleep(5)
