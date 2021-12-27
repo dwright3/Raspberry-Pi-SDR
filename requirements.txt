@@ -1,0 +1,5 @@
+gpsd-py3
+numpy
+PeakUtils
+pyrtlsdr
+scipy
