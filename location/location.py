@@ -1,9 +1,12 @@
-"""Run a test useing an RTL SDR to find the peaks in a spectrum."""
+"""Run a test using an RTL SDR to find the peaks in a spectrum."""
 import time
 import numpy as np
 import sys
 import os
 import matplotlib.pyplot as plt
+import gpsd
+import peakutils
+from scipy.signal import find_peaks
 
 from rtlsdr import RtlSdr
 from rtlsdr.rtlsdr import LibUSBError
@@ -49,6 +52,7 @@ class baseSDRControl:
         self.NUM_SAMPLES = NUM_SAMPLES
         self.GAIN = GAIN
         self.sdr = None
+        self.spectrum = None
 
     def __enter__(self):
         """Enter method for context manager - set up SDR."""
@@ -168,12 +172,12 @@ class baseSDRControl:
             print("\r[i] Progress " + bar + f" {percent}%", end="", flush=True)
 
         # shift the fft so Fc is at the centre of the plot
-        spectrum = np.fft.fftshift(fft_avg / NUM_AVG)
+        self.spectrum = np.fft.fftshift(fft_avg / NUM_AVG)
 
         # Obtain frequency axis
-        faxis = self.fft_f_axis(freq)
+        self.faxis = self.fft_f_axis(freq)
 
-        return spectrum, faxis
+        return self.spectrum, self.faxis
 
     def fft_f_axis(self, freq):
         """Process the FFT to more reabale form and create frequency axis."""
@@ -182,12 +186,12 @@ class baseSDRControl:
         fstep = fstep / 1e6  # convert to MHz
         freq = freq / 1e6  # Convert to MHz
 
-        faxis = [freq - (fstep * (self.NUM_SAMPLES / 2)) + k * fstep
-                 for k in range(self.NUM_SAMPLES)]
+        self.faxis = [freq - (fstep * (self.NUM_SAMPLES / 2)) + k * fstep
+                      for k in range(self.NUM_SAMPLES)]
 
-        return faxis
+        return self.faxis
 
-    def GPIO_setup():
+    def GPIO_setup(self):
         """Set up Rpi gpio for antenna switching."""
         chan_list = [16, 18, 22, 24, 26]  # pins to be used
 
@@ -205,16 +209,104 @@ class baseSDRControl:
         time.sleep(0.1)
 
 
-class GPSReader:
-    def __init__(self):
-        pass
-
 class peakFinder:
+    """Finds peaks and noise within the measured spectrum."""
+
     def __init__(self):
-        pass
+        """Is Constructor."""
+
+    @staticmethod
+    def get_peak_indexes(spectrum, faxis):
+        """Find peaks in the data using a peak detector."""
+        # indexes = peakutils.peak.indexes(self.spectrum.real,
+        #                                  thres=0.2, min_dist=50)
+        indexes, _ = find_peaks(spectrum, distance=50, prominence=10)
+
+        # Make an array of peak amplitudes and corresponding
+        # frequencies from detected peak indexes
+
+        peaks_mag = [spectrum[indexes[i]] for i in range(len(indexes))]
+        peaks_freq = [faxis[indexes[i]] for i in range(len(indexes))]
+
+        return peaks_freq, peaks_mag
+
+    def peak_sort(self, freq, faxis, spectrum):
+        """
+        Sort the peaks in to a useful order.
+
+        Based on the distance from the measured frequency.
+        """
+        freq = freq/1e6
+
+        peaks_freq, peaks_mag = self.get_peak_indexes(spectrum, faxis)
+
+        # search for peak at frequency closest to frequency of interest
+        # subtract frequency of interest from frequencies peaks are detected at
+        search = [i - freq for i in peaks_freq]
+
+        # convert values to absolute
+        abs_search = np.abs(search)
+
+        # lowest number will be closest to frequency of interest
+        # find the index of this number in the list
+        min_index = np.argmin(abs_search)
+
+        # create empty lists for sorted values
+        peaks_freq_sorted = []
+        peaks_mag_sorted = []
+
+        # check peak is close enough to the frequency of interest
+        if (freq-0.05) < peaks_freq[min_index] < (freq+0.05):
+
+            peaks_mag_sorted.append(peaks_mag.pop(min_index))
+            peaks_freq_sorted.append(peaks_freq.pop(min_index))
+
+        # if peak detected isn't close enough use bin at frequecny
+        # of interest regardless if a peak was detected there or not
+        else:
+
+            # search for bins closest to frequency of interest and save
+            search_freq = [i - freq for i in faxis]
+            # convert values to absolute
+            abs_search_freq = np.abs(search_freq)
+
+            # lowest number will be closest to frequency of interest
+            # find the index of this number in the list
+            min_index_freq = np.argmin(abs_search_freq)
+
+            peaks_mag_sorted.append(spectrum[min_index_freq])
+            peaks_freq_sorted.append(faxis[min_index_freq])
+
+        # order detected peaks from large to small
+        peaks_index = np.argsort(peaks_mag)[::-1]
+
+        # use peak index to retrieve data from data sets,
+        # retrieve 3 highest magnitude peaks
+
+        for i in peaks_index[:3]:
+
+            peaks_mag_sorted.append(peaks_mag[i])
+            peaks_freq_sorted.append(peaks_freq[i])
+
+        return peaks_mag_sorted, peaks_freq_sorted
+
+    @staticmethod
+    def get_noise(spectrum, peaks):
+        """Get the average of all the FFT bins.
+
+        Excluding those where peaks were detected to aproximate noise
+        """
+        total_all_spectrum = np.sum(spectrum)
+        total_all_peaks = np.sum(peaks)
+
+        total_excl_peaks = total_all_spectrum - total_all_peaks
+
+        bin_avg = total_excl_peaks / (len(spectrum)-len(peaks))
+
+        return bin_avg
 
 
-class LocationMeasurements(baseSDRControl):
+class locationMeasurements(baseSDRControl, peakFinder):
     """Inherits baseSDRControl to provide interface for RTL SDR control.
 
     Process the collected FFTs in to the required data.
@@ -222,11 +314,23 @@ class LocationMeasurements(baseSDRControl):
 
     def __init__(self, SAMPLE_RATE, NUM_SAMPLES, GAIN):
         """Init method."""
-        super().__init__(SAMPLE_RATE, NUM_SAMPLES, GAIN)
+        super(locationMeasurements, self).__init__(SAMPLE_RATE, NUM_SAMPLES, GAIN)
+        super(baseSDRControl, self).__init__()
 
-    def peak_search():
-        super().fft_f_axis().faxis
-        pass
+    def __enter__(self):
+        """Enter method for context manager - set up SDR."""
+        super(locationMeasurements, self).__enter__()
+
+        try:
+            gpsd.connect()
+
+        except:
+            print("[\033[31mX\033[0;0m] GPS Not Available on This Device")
+
+        return self
+
+    # TODO add gps to class
+    # TODO add method to execute complete test
 
     def gps_loc():
         pass
@@ -312,286 +416,39 @@ class GPIOControl:
         return
 
 
-class fftColect:
-    """class to perform FFT collection from RTL-SDR."""
-
-    # class variables
-    num_avg = 100
-    num_samples = 5 * 1024
-    flag = False
-    i = 1
-    sample_rate = 2.048e6
-
-    def __init__(self, freq_mhz):
-        """Initialise instance variables."""
-
-        self.freq_mhz = freq_mhz
-        self.freq = freq_mhz * 1e6
-
-    def sdr_control(self, freq, i, flag, sample_rate):
-
-        try:
-
-            # Create device
-            sdr = RtlSdr()
-
-            # configure device
-            sdr.sample_rate = sample_rate  # Hz
-            sdr.center_freq = freq + 0.1e6  # Hz
-            sdr.gain = 49
-
-            print("Sampling at %.2f MHz\n" % (self.freq_mhz))
-
-            return sdr, flag
-
-        except:
-
-            print("RTL SDR Communication Error")
-            print(sys.exc_info()[:])
-
-            flag = True
-
-            if i <= 60:
-
-                time.sleep(1)
-                print("Attempting to Re-establish Connection...... Attempt: %d\n" % i)
-                i = i + 1
-                sdr, flag = self.sdr_control(freq, i, flag)
-
-            else:
-
-                # gpio disconnect
-                try:
-                    gpio.cleanup()
-                except:
-                    print("GPIO Not Deactivated")
-
-                # exit programme with an error message
-                sys.exit("RTL SDR Device Not Connected\n")
-
-        return sdr, flag
-
-    def fft(self, sdr, num_samples):
-        try:
-            # Read in samples from the device
-            samples = sdr.read_samples(num_samples)
-
-            w = np.hamming(num_samples)
-            # Process fft
-            # take fft of samples
-            fft = np.fft.fft(samples * w)
-
-            # convert to dB
-            spectrum = 20 * np.log10(abs(fft * 2))
-
-            # print("FFT Ready..... \n")
-
-        except:
-            spectrum = 0
-            print("FFT Failed \n")
-
-        return spectrum
-
-    # Function to get samples and create FFT
-    def data(self, sdr, num_avg, num_samples):
-        print("Data Capture in Progress........\n")
-
-        x = 1
-        a = 1
-
-        spectrum_avg = np.zeros(num_samples)
-
-        while x <= num_avg:
-            # time.sleep(0.1)
-            spectrumA = self.fft(sdr, num_samples)
-            spectrum_avg = spectrum_avg + spectrumA
-            if a == 100:
-                percent_comp = (x / num_avg) * 100
-                print("%d Averages Taken" % x)
-                print("Sampling %.2f %% Complete\n" % percent_comp)
-
-                a = 1
-            else:
-                a += 1
-            x += 1
-
-        spectrum = spectrum_avg / num_avg
-
-        print("Data Capture Complete\n")
-
-        # shift the fft so Fc is at the centre of the plot
-        spectrum = np.fft.fftshift(spectrum)
-
-        array_length = len(spectrum)
-
-        # create frequency axis, noting that Fc is in centre
-        fstep = sdr.sample_rate / len(spectrum)  # fft bin size
-        fstep = fstep / 1000000  # convert to MHz
-
-        faxis = []
-        k = 0
-        while k < array_length:
-            # create f axis with Fc in the centre
-            faxis.append(
-                ((sdr.center_freq / 1000000) - (fstep * (len(spectrum) / 2)))
-                + k * fstep
-            )
-            # below creates f axis with Fc at the start
-            # faxis.append((sdr.center_freq/1000000) + k * fstep)
-            k = k + 1
-
-        return spectrum, faxis
-
-    # Function to set up Rpi gpio for antenna switching
-    def gpio_set(self):
-        try:
-            # pin numbering mode
-            gpio.setmode(gpio.BOARD)
-
-            # pins to be used
-            chan_list = [16, 18, 22, 24, 26]
-
-            # set pins as outputs with an initial value of low
-            gpio.setup(chan_list, gpio.OUT, initial=gpio.LOW)
-
-        except NameError:
-            print("GPIO Not Setup")
-
-        return
-
-    # function to switch antenna
-    def gpio_switch(self, chan, state):
-        try:
-
-            # activate selected gpio
-            gpio.output(chan, state)
-
-            # wait for switch
-            time.sleep(0.1)
-
-        except NameError:
-            print("GPIO Not Switched")
-
-        return
-
-    # Function to produce strings with time and date
-    def time_date(self):
-        # string including date and time
-        current_time = time.strftime("%d/%m/%y %H:%M:%S")
-        # string with just date
-        current_date = time.strftime("%d.%m.%y")
-        # string with just time
-        current_hour = time.strftime("%H:%M:%S")
-        # string with date and time in a format suitable for use as a file name
-        time_for_save = time.strftime("%m_%d_%y-%H_%M_%S")
-
-        return current_date, current_hour, current_time, time_for_save
-
-        # Function to save the unprocessed sampled data for possible later use
-
-    def raw_save(self, time_for_save, freq_mhz, sample_rate, samples, current_date):
-        # convert sample rate to MHz
-        sample_rate = sample_rate / 1000000
-
-        dir = "Test " + current_date
-
-        if not os.path.isdir(dir):
-            print("Creating New Folder\n")
-            os.mkdir(dir)
-
-        # save samples to .NPY file
-        np.save(
-            dir
-            + "/"
-            + "%s-%.1fMHz-%.4fMHz-raw_samples" % (time_for_save, freq_mhz, sample_rate),
-            samples,
-        )
-
-        # print confirmation of file name used to terminal
-        file_name = "%s-%.1fMHz-%.4fMHz-raw_samples" % (
-            time_for_save,
-            freq_mhz,
-            sample_rate,
-        )
-        print(file_name + " File Saved Locally\n")
-
-        return file_name
-
-    def perform(self):
-
-        # Set up GPIO
-        self.gpio_set()
-
-        # Activate correct antenna
-        if self.freq < 500e6:
-            # Activate 70MHz antenna
-            self.gpio_switch(16, 1)
-
-        elif self.freq >= 500e6:
-            # Activate 868MHz antenna
-            self.gpio_switch(18, 1)
-
-        else:
-            print("Antenna Switch Failure \n")
-
-        # Set up SDR
-        sdr, flag = self.sdr_control(self.freq, self.i, self.flag, self.sample_rate)
-
-        print(flag)
-
-        # Collect data
-        spectrum, faxis = self.data(sdr, self.num_avg, self.num_samples)
-
-        current_date, current_hour, current_time, time_for_save = self.time_date()
-
-        file_name = self.raw_save(
-            time_for_save, self.freq_mhz, self.sample_rate, spectrum, current_date
-        )
-
-        try:
-            # Disconnect SDR
-            sdr.close()
-
-        except:
-            print("\nFailed to Close RTL SDR\n")
-
-        # Deactivate correct antenna
-        if self.freq < 500e6:
-            # Deactivate 70MHz antenna
-            self.gpio_switch(16, 0)
-
-        elif self.freq >= 500e6:
-            # Deactivate 868MHz antenna
-            self.gpio_switch(18, 0)
-
-        else:
-            print("Antenna Switch Failure \n")
-
-        # GPIO disconnect
-        try:
-            gpio.cleanup()
-
-        except NameError:
-            print("GPIO Not Deactivated")
-
-        # flag = True
-
-        if flag is True:
-            print("\nThis Device Has Recovered From a Communication Error\n")
-
-        if flag is False:
-            print("\nThis Device Has Not Recovered From a Communication Error\n")
-
-
-
-def formated_plot(faxis, spectrum, cal_factor):
-
+def formated_plot(faxis, spectrum, cal_factor, freq, peak, noise):
+    """Produce a formated plot of date collected in one measurement cycle."""
     plt.figure()
 
-    plt.plot(faxis, (spectrum.real + cal_factor), label="Received Power")
+    peak = np.asanyarray(peak)
 
     ymin = faxis[0]
     ymax = faxis[-1]
+
+    # adjust all measurements for calibration factor
+    spectrum = spectrum + cal_factor
+    peak = peak + cal_factor
+    noise = noise + cal_factor
+
+    plt.plot(faxis, spectrum, label="Received Power")
+    plt.plot(freq, peak, 'go', label='Detected Peaks')
+
+    # annotate plot with highest peak
+    plt.annotate(f'Observed Peak\n {peak[0]:.1f} dBm \n {freq[0]:.3f} MHz',
+                 xy=(freq[0], peak[0]), xycoords='data',
+                 xytext=(0.65, 0.75), textcoords='figure fraction',
+                 arrowprops=dict(arrowstyle="->",
+                                 connectionstyle="arc3,rad=.2"))
+
+    # plot noise level
+    plt.plot([ymin, ymax], [noise, noise], 'r--',
+             label="Estimated Noise Level")
+
+    # annotate plot with noise plt
+    plt.annotate(f'Estimated Noise  \n {noise:.1f} dBm',
+                 xy=(faxis[int(len(faxis)/2)], noise),
+                 xycoords='data', xytext=(0.2, 0.6),
+                 textcoords='figure fraction')
 
     plt.xlabel('Frequency (MHz)')
     plt.ylabel('Received Power (dBm)')
@@ -606,7 +463,7 @@ if __name__ == "__main__":
     # TODO don't forget to shift tuning frequency to avoid DC leakage.
 
     SAMPLE_RATE = 2.048e6
-    NUM_SAMPLES = 1024
+    NUM_SAMPLES = 1024 * 5
     GAIN = 49
 
     CAL_FACTOR_71 = -135
@@ -614,13 +471,17 @@ if __name__ == "__main__":
     FREQ_OFFSET = 0.1
     PEAK_SEARCH_RANGE = 0.05
 
-    with LocationMeasurements(SAMPLE_RATE, NUM_SAMPLES, GAIN) as m:
+    with locationMeasurements(SAMPLE_RATE, NUM_SAMPLES, GAIN) as m:
         if HAS_GPIO:
             # Activate 70MHz antenna
             m.GPIO_switch(16, 1)
 
         # 71MHz test
         spectrum_71, faxis_71 = m.averaged_ffts(71e6)
+        # freq_71, peaks_71 = m.get_peak_indexes()
+        peak_71, freq_71 = m.peak_sort(71e6, faxis_71, spectrum_71)
+
+        bin_avg_71 = m.get_noise(spectrum_71, peak_71)
 
         if HAS_GPIO:
             # Deactivate 70MHz antenna
@@ -630,6 +491,10 @@ if __name__ == "__main__":
 
         # 869MHz test
         spectrum_869, faxis_869 = m.averaged_ffts(869.525e6)
+        # freq_869, peaks_869 = m.get_peak_indexes()
+        peak_869, freq_869 = m.peak_sort(869.525e6, faxis_869, spectrum_869)
+
+        bin_avg_869 = m.get_noise(spectrum_869, peak_869)
 
         if HAS_GPIO:
             # Deactivate 868MHz antenna
@@ -639,14 +504,16 @@ if __name__ == "__main__":
         print("\n[i] This Device Has Recovered From a Communication Error")
 
     if HAS_SCREEN:
-        formated_plot(faxis_71, spectrum_71, CAL_FACTOR_71)
-        formated_plot(faxis_869, spectrum_869, CAL_FACTOR_869)
+        formated_plot(faxis_71, spectrum_71, CAL_FACTOR_71, freq_71, peak_71,
+                      bin_avg_71)
+        formated_plot(faxis_869, spectrum_869, CAL_FACTOR_869, freq_869, peak_869,
+                      bin_avg_869)
 
         plt.show()
 
     print("\n[\033[0:32m\u2713\033[0;0m]Complete")
 
-    #test.sdr.close()
+    # test.sdr.close()
 
     # test.sdr_set_up(1, False, 2.048e6)
     # Set up never ending loop
